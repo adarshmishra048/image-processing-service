@@ -1,18 +1,31 @@
 const multer = require("multer");
 const path = require("path");
 
-// Configure where and how files will be stored
+// Configure disk storage
 const storage = multer.diskStorage({
-  // Destination folder
+  // Folder where uploaded files will be stored
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, "uploads/originals/");
   },
 
-  // Generates a unique filename
+  // Generate a unique and readable filename
   filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    // Remove the extension from the original filename
+    const originalName = path.parse(file.originalname).name;
 
-    cb(null, uniqueName + path.extname(file.originalname));
+    // Replace spaces with hyphens and convert to lowercase
+    const sanitizedName = originalName
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9-_]/g, "")
+      .toLowerCase();
+
+    // Keep the original extension
+    const extension = path.extname(file.originalname).toLowerCase();
+
+    // Generate unique filename
+    const uniqueFilename = `${Date.now()}-${sanitizedName}${extension}`;
+
+    cb(null, uniqueFilename);
   },
 });
 
@@ -28,7 +41,7 @@ const fileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Only image files are allowed."), false);
+    cb(new Error("Only JPEG, PNG, WEBP, and GIF images are allowed."), false);
   }
 };
 

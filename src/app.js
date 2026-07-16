@@ -1,10 +1,15 @@
 const express = require("express");
+
 const authRoutes = require("./routes/authRoutes");
+const imageRoutes = require("./routes/imageRoutes");
+const errorMiddleware = require("./middleware/errorMiddleware");
 
 const app = express();
 
 app.use(express.json());
+
 app.use("/api/auth", authRoutes);
+app.use("/api/images", imageRoutes);
 
 app.get("/", (req, res) => {
   res.json({
@@ -24,5 +29,8 @@ app.get("/about", (req, res) => {
     version: "1.0.0",
   });
 });
+
+// Error middleware
+app.use(errorMiddleware);
 
 module.exports = app;
