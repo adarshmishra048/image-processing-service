@@ -15,7 +15,10 @@ const uploadImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No image uploaded.");
   }
 
-  const image = await imageService.createImageFromUpload(req.file, req.user.id);
+  const image = await imageService.createImageFromUpload(
+    req.file,
+    req.user.id
+  );
 
   res.status(201).json({
     success: true,
@@ -30,26 +33,46 @@ const uploadImage = asyncHandler(async (req, res) => {
  * @access Private
  */
 const transformUploadedImage = asyncHandler(async (req, res) => {
-  if (Object.keys(req.body).length === 0) {
-    throw new ApiError(400, "No transformations provided.");
-  }
-
-  const image = await imageService.getUserImage(req.params.id, req.user.id);
-
-  const transformed = await imageProcessingService.transformImage(
-    image.path,
-    req.body,
+  // Get the image and verify ownership
+  const image = await imageService.getUserImage(
+    req.params.id,
+    req.user.id
   );
 
+  // Apply transformations
+  const transformed = await imageProcessingService.transformImage(
+    image.path,
+    req.body
+  );
+
+  // Save transformed image metadata
   const savedImage = await imageService.createImage({
     owner: image.owner,
+
     originalName: image.originalName,
+
     filename: transformed.filename,
+
     path: transformed.path,
+
     mimetype: transformed.mimetype,
+
     size: transformed.size,
+
     width: transformed.width,
+
     height: transformed.height,
+
+    // Mark as transformed image
+    isOriginal: false,
+
+    // Link back to the original upload
+    originalImage: image.isOriginal
+      ? image._id
+      : image.originalImage,
+
+    // Store transformation parameters for caching/auditing
+    transformationParams: req.body,
   });
 
   res.status(201).json({
@@ -57,8 +80,6 @@ const transformUploadedImage = asyncHandler(async (req, res) => {
     message: "Image transformed successfully.",
     image: savedImage,
   });
-
-
 });
 
 /**
@@ -67,19 +88,29 @@ const transformUploadedImage = asyncHandler(async (req, res) => {
  * @access Private
  */
 const getUserImages = asyncHandler(async (req, res) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
+  const page = Math.max(Number(req.query.page) || 1, 1);
 
-  const result = await imageService.getUserImages(req.user.id, page, limit);
+  const limit = Math.min(
+    Math.max(Number(req.query.limit) || 10, 1),
+    100
+  );
+
+  const result = await imageService.getUserImages(
+    req.user.id,
+    page,
+    limit
+  );
 
   res.status(200).json({
     success: true,
+
     pagination: {
       totalImages: result.totalImages,
       currentPage: result.currentPage,
       totalPages: result.totalPages,
       limit: result.limit,
     },
+
     images: result.images,
   });
 });
@@ -90,7 +121,10 @@ const getUserImages = asyncHandler(async (req, res) => {
  * @access Private
  */
 const getImageById = asyncHandler(async (req, res) => {
-  const image = await imageService.getUserImage(req.params.id, req.user.id);
+  const image = await imageService.getUserImage(
+    req.params.id,
+    req.user.id
+  );
 
   res.status(200).json({
     success: true,
@@ -104,7 +138,10 @@ const getImageById = asyncHandler(async (req, res) => {
  * @access Private
  */
 const deleteImage = asyncHandler(async (req, res) => {
-  await imageService.deleteUserImage(req.params.id, req.user.id);
+  await imageService.deleteUserImage(
+    req.params.id,
+    req.user.id
+  );
 
   res.status(200).json({
     success: true,

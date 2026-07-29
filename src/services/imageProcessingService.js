@@ -1,20 +1,32 @@
 const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs/promises");
+const crypto = require("crypto");
 const ApiError = require("../errors/ApiError");
 
-/**
- * Apply resize transformation
- */
+// ------------------------------
+// Sharp production limits
+// ------------------------------
+sharp.cache(false); // Reduce memory usage
+sharp.concurrency(2); // Safer on small VPS instances
+
+// ------------------------------
+// Resize
+// ------------------------------
 const applyResize = (image, resize) => {
   if (!resize) return image;
 
-  return image.resize(Number(resize.width), Number(resize.height));
+  return image.resize({
+    width: Number(resize.width),
+    height: Number(resize.height),
+    fit: resize.fit || "cover",
+    withoutEnlargement: true,
+  });
 };
 
-/**
- * Apply crop transformation
- */
+// ------------------------------
+// Crop
+// ------------------------------
 const applyCrop = (image, crop) => {
   if (!crop) return image;
 
@@ -26,45 +38,31 @@ const applyCrop = (image, crop) => {
   });
 };
 
-/**
- * Apply rotation
- */
+// ------------------------------
+// Rotate
+// ------------------------------
 const applyRotate = (image, angle) => {
   if (angle === undefined) return image;
 
   return image.rotate(Number(angle));
 };
 
-/**
- * Apply flip
- */
-const applyFlip = (image, flip) => {
-  if (!flip) return image;
+// ------------------------------
+// Flip / Mirror
+// ------------------------------
+const applyFlip = (image, flip) => (flip ? image.flip() : image);
 
-  return image.flip();
-};
+const applyMirror = (image, mirror) => (mirror ? image.flop() : image);
 
-/**
- * Apply mirror (horizontal flip)
- */
-const applyMirror = (image, mirror) => {
-  if (!mirror) return image;
+// ------------------------------
+// Grayscale
+// ------------------------------
+const applyGrayscale = (image, grayscale) =>
+  grayscale ? image.grayscale() : image;
 
-  return image.flop();
-};
-
-/**
- * Apply grayscale
- */
-const applyGrayscale = (image, grayscale) => {
-  if (!grayscale) return image;
-
-  return image.grayscale();
-};
-
-/**
- * Apply sepia
- */
+// ------------------------------
+// Sepia
+// ------------------------------
 const applySepia = (image, sepia) => {
   if (!sepia) return image;
 
@@ -75,27 +73,21 @@ const applySepia = (image, sepia) => {
   ]);
 };
 
-/**
- * Apply blur
- */
+// ------------------------------
+// Blur / Sharpen
+// ------------------------------
 const applyBlur = (image, blur) => {
   if (!blur) return image;
 
   return image.blur(typeof blur === "number" ? blur : undefined);
 };
 
-/**
- * Apply sharpen
- */
-const applySharpen = (image, sharpen) => {
-  if (!sharpen) return image;
+const applySharpen = (image, sharpen) =>
+  sharpen ? image.sharpen() : image;
 
-  return image.sharpen();
-};
-
-/**
- * Apply output format
- */
+// ------------------------------
+// Format
+// ------------------------------
 const applyFormat = (image, format) => {
   if (!format) {
     return {
@@ -108,16 +100,21 @@ const applyFormat = (image, format) => {
 
   switch (ext) {
     case "png":
-      image.png();
+      image.png({ compressionLevel: 9 });
       break;
 
     case "jpg":
     case "jpeg":
-      image.jpeg();
+      image.jpeg({
+        quality: 85,
+        mozjpeg: true,
+      });
       break;
 
     case "webp":
-      image.webp();
+      image.webp({
+        quality: 85,
+      });
       break;
 
     default:
@@ -130,63 +127,45 @@ const applyFormat = (image, format) => {
   };
 };
 
-/**
- * Build transformed filename
- */
+// ------------------------------
+// Stable transformation hash
+// ------------------------------
+const createTransformHash = (transformations) => {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(transformations))
+    .digest("hex")
+    .slice(0, 12);
+};
+
+// ------------------------------
+// Build filename
+// ------------------------------
 const buildFilename = (inputPath, transformations, extension) => {
   const baseName = path.basename(inputPath, path.extname(inputPath));
 
-  let suffix = "";
+  const hash = createTransformHash(transformations);
 
-  if (transformations.resize) {
-    suffix += `-${transformations.resize.width}x${transformations.resize.height}`;
-  }
+  const finalExt =
+    extension || path.extname(inputPath).replace(".", "");
 
-  if (transformations.crop) {
-    suffix += "-crop";
-  }
-
-  if (transformations.rotate) {
-    suffix += `-r${transformations.rotate}`;
-  }
-
-  if (transformations.flip) {
-    suffix += "-flip";
-  }
-
-  if (transformations.mirror) {
-    suffix += "-mirror";
-  }
-
-  if (transformations.grayscale) {
-    suffix += "-gray";
-  }
-
-  if (transformations.sepia) {
-    suffix += "-sepia";
-  }
-
-  if (transformations.blur) {
-    suffix += "-blur";
-  }
-
-  if (transformations.sharpen) {
-    suffix += "-sharp";
-  }
-
-  if (extension) {
-    suffix += `-${extension}`;
-  }
-
-  return `${baseName}${suffix}.${extension || path.extname(inputPath).slice(1)}`;
+  return `${baseName}-${hash}.${finalExt}`;
 };
 
-/**
- * Main transformation function
- */
+// ------------------------------
+// Main transform function
+// ------------------------------
 const transformImage = async (inputPath, transformations) => {
+  // Ensure input exists
+  try {
+    await fs.access(inputPath);
+  } catch {
+    throw new ApiError(404, "Source image not found.");
+  }
+
   let image = sharp(inputPath);
 
+  // Apply transformations
   image = applyResize(image, transformations.resize);
   image = applyCrop(image, transformations.crop);
   image = applyRotate(image, transformations.rotate);
@@ -197,17 +176,28 @@ const transformImage = async (inputPath, transformations) => {
   image = applyBlur(image, transformations.blur);
   image = applySharpen(image, transformations.sharpen);
 
+  // Apply output format
   const { image: processedImage, extension } = applyFormat(
     image,
-    transformations.format,
+    transformations.format
   );
 
+  // Generate deterministic filename
   const filename = buildFilename(inputPath, transformations, extension);
 
-  const outputPath = path.join("uploads", "transformed", filename);
+  const outputDir = path.join("uploads", "transformed");
+  await fs.mkdir(outputDir, { recursive: true });
 
-  await processedImage.toFile(outputPath);
+  const outputPath = path.join(outputDir, filename);
 
+  // Avoid regenerating existing variants
+  try {
+    await fs.access(outputPath);
+  } catch {
+    await processedImage.toFile(outputPath);
+  }
+
+  // Read metadata
   const metadata = await sharp(outputPath).metadata();
   const stats = await fs.stat(outputPath);
 
@@ -218,6 +208,7 @@ const transformImage = async (inputPath, transformations) => {
     size: stats.size,
     width: metadata.width,
     height: metadata.height,
+    hash: createTransformHash(transformations),
   };
 };
 

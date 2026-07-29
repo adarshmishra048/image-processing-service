@@ -4,13 +4,54 @@ const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
 
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./config/swagger");
+
+
+const {
+  helmetMiddleware,
+  corsMiddleware,
+  apiLimiter,
+} = require("./config/security");
+
 const app = express();
 
-app.use(express.json());
+/**
+ * ==========================
+ * Security Middleware
+ * ==========================
+ */
+app.use(helmetMiddleware);
+app.use(corsMiddleware);
 
+/**
+ * JSON Body Parser (1MB limit)
+ */
+app.use(express.json({ limit: "1mb" }));
+
+/**
+ * Global API Rate Limiter
+ */
+app.use(apiLimiter);
+
+/**
+ * Swagger Documentation
+ */
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * ==========================
+ * Routes
+ * ==========================
+ */
 app.use("/api/auth", authRoutes);
 app.use("/api/images", imageRoutes);
 
+/**
+ * ==========================
+ * Health & Info Routes
+ * ==========================
+ */
 app.get("/", (req, res) => {
   res.json({
     message: "Image Processing Service API",
@@ -30,7 +71,11 @@ app.get("/about", (req, res) => {
   });
 });
 
-// Error middleware
+/**
+ * ==========================
+ * Error Middleware
+ * ==========================
+ */
 app.use(errorMiddleware);
 
 module.exports = app;

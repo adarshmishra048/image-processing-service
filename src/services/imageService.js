@@ -1,23 +1,24 @@
-const Image = require("../models/Image");
-const ApiError = require("../errors/ApiError");
 const fs = require("fs/promises");
 const sharp = require("sharp");
 
+const Image = require("../models/Image");
+const ApiError = require("../errors/ApiError");
+
 /**
- * Create a new image document
+ * Create an image document
  */
 const createImage = async (imageData) => {
   return await Image.create(imageData);
 };
 
 /**
- * Create image document from uploaded file
+ * Create an image document from an uploaded file
  */
-const createImageFromUpload = async (file, owner) => {
+const createImageFromUpload = async (file, userId) => {
   const metadata = await sharp(file.path).metadata();
 
   return await Image.create({
-    owner,
+    owner: userId,
     originalName: file.originalname,
     filename: file.filename,
     path: file.path,
@@ -56,6 +57,9 @@ const getUserImage = async (imageId, userId) => {
  * Get paginated images for a user
  */
 const getUserImages = async (userId, page = 1, limit = 10) => {
+  page = Math.max(Number(page), 1);
+  limit = Math.min(Math.max(Number(limit), 1), 100);
+
   const skip = (page - 1) * limit;
 
   const totalImages = await Image.countDocuments({
@@ -65,9 +69,7 @@ const getUserImages = async (userId, page = 1, limit = 10) => {
   const images = await Image.find({
     owner: userId,
   })
-    .sort({
-      createdAt: -1,
-    })
+    .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
@@ -80,23 +82,16 @@ const getUserImages = async (userId, page = 1, limit = 10) => {
   };
 };
 
-
 /**
- * Delete an image owned by the user
+ * Delete an image (database + file)
  */
 const deleteUserImage = async (imageId, userId) => {
   const image = await getUserImage(imageId, userId);
 
-  console.log("Deleting:", image.path);
-
-  // Delete the file if it exists
   try {
     await fs.unlink(image.path);
   } catch (error) {
-    // Ignore if the file has already been removed
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
+    console.warn("Image file not found:", image.path);
   }
 
   await image.deleteOne();
@@ -106,9 +101,9 @@ const deleteUserImage = async (imageId, userId) => {
 
 module.exports = {
   createImage,
+  createImageFromUpload,
   findImageById,
   getUserImage,
   getUserImages,
   deleteUserImage,
 };
- 

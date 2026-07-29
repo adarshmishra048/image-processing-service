@@ -5,7 +5,7 @@ const path = require("path");
 const storage = multer.diskStorage({
   // Folder where uploaded files will be stored
   destination: (req, file, cb) => {
-    cb(null, "uploads/originals/");
+    cb(null, "uploads/originals");
   },
 
   // Generate a unique and readable filename
@@ -16,7 +16,7 @@ const storage = multer.diskStorage({
     // Replace spaces with hyphens and convert to lowercase
     const sanitizedName = originalName
       .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9-_]/g, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "")
       .toLowerCase();
 
     // Keep the original extension
