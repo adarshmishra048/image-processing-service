@@ -3,10 +3,11 @@
 ![Node.js](https://img.shields.io/badge/Node.js-20-green)
 ![Express](https://img.shields.io/badge/Express-5-black)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 A backend API for uploading, transforming, and managing images using **Node.js, Express, MongoDB, Multer, Sharp, and JWT authentication**.
 
-I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored authentication with JWT, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design for managing original and transformed images, and API documentation with Swagger. The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
+I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored JWT authentication, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design to manage original and transformed images, and API documentation with Swagger. The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
 
 ---
 
@@ -244,7 +245,7 @@ For development, images are stored on the local filesystem:
 ```text
 uploads/
 ├── originals/
-└── transformed/
+└── transformed/ Note: This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) is planned for production use.
 ```
 
 ---
@@ -264,7 +265,7 @@ uploads/
 - `originalImage`
 - `transformationParams`
 
-Indexes are added for better pagination and faster lookup of transformed images.
+Indexes are added to improve pagination and enable faster lookup of transformed images.
 
 ---
 
@@ -298,6 +299,20 @@ While building this project, I learned how to:
 - connect original and transformed images
 - implement caching-friendly logic
 - document APIs with Swagger
+
+---
+
+## Author
+
+**Adarsh Mishra**
+
+- GitHub: https://github.com/adarshmishra048
+
+---
+
+## License
+
+This project is licensed under the **MIT License**.
 
 ---
 
