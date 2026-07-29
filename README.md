@@ -3,7 +3,6 @@
 ![Node.js](https://img.shields.io/badge/Node.js-20-green)
 ![Express](https://img.shields.io/badge/Express-5-black)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
-![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 A backend API for uploading, transforming, and managing images using **Node.js, Express, MongoDB, Multer, Sharp, and JWT authentication**.
@@ -53,13 +52,6 @@ I built this project to understand how real-world image processing services are 
 
 - Interactive Swagger / OpenAPI documentation
 
-### Integration Testing
-
-- Jest for test runner
-- Supertest for HTTP endpoint testing
-- Authenticated image upload test
-- Database-connected integration tests
-
 ---
 
 ## Tech Stack
@@ -75,13 +67,12 @@ I built this project to understand how real-world image processing services are 
 | Validation | Joi |
 | Documentation | Swagger / OpenAPI |
 | Security | Helmet, express-rate-limit |
-| Testing | Jest, Supertest |
 
 ---
 
 ## Project Structure
 
-\`\`\`text
+```text
 src/
 ├── config/
 ├── controllers/
@@ -94,20 +85,13 @@ src/
 ├── validators/
 ├── app.js
 └── server.js
-
-tests/
-├── auth.test.js
-├── image.test.js
-├── setup.js
-└── fixtures/
-    └── test.jpg
-\`\`\`
+```
 
 ---
 
 ## Architecture
 
-\`\`\`text
+```text
 Client
    │
    ▼
@@ -123,7 +107,7 @@ Services
    │
    ▼
 MongoDB
-\`\`\`
+```
 
 I kept the controllers simple and moved most of the business logic into services. This makes the code easier to maintain and extend.
 
@@ -133,57 +117,57 @@ I kept the controllers simple and moved most of the business logic into services
 
 ### 1. Clone the repository
 
-\`\`\`bash
+```bash
 git clone https://github.com/adarshmishra048/image-processing-service.git
 cd image-processing-service
-\`\`\`
+```
 
 ### 2. Install dependencies
 
-\`\`\`bash
+```bash
 npm install
-\`\`\`
+```
 
-### 3. Create a \`.env\` file
+### 3. Create a `.env` file
 
-\`\`\`env
+```env
 PORT=3000
-MONGODB_URI=your_mongodb_connection_string
+MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 NODE_ENV=development
-\`\`\`
+```
 
 ### 4. Run the server
 
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 The server will start on:
 
-\`\`\`text
+```text
 http://localhost:3000
-\`\`\`
+```
 
 ---
 
 ## API Documentation
 
-Interactive API documentation is available at:
+Swagger UI is available at:
 
-\`\`\`text
-http://localhost:3000/api-docs
-\`\`\`
+```text
+http://localhost:3000/api/docs
+```
 
 ---
 
 ## Authentication
 
-After logging in, include the token in the \`Authorization\` header.
+After logging in, include the token in the `Authorization` header.
 
-\`\`\`http
+```http
 Authorization: Bearer YOUR_TOKEN
-\`\`\`
+```
 
 ---
 
@@ -193,38 +177,38 @@ Authorization: Bearer YOUR_TOKEN
 
 | Method | Endpoint | Description |
 |-------|----------|-------------|
-| POST | \`/api/auth/register\` | Register a new user |
-| POST | \`/api/auth/login\` | Login and receive a JWT |
+| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/login` | Login and receive a JWT |
 
 ### Images
 
 | Method | Endpoint | Description |
 |-------|----------|-------------|
-| POST | \`/api/images\` | Upload an image |
-| GET | \`/api/images\` | Get paginated user images |
-| GET | \`/api/images/:id\` | Get image metadata |
-| POST | \`/api/images/:id/transform\` | Apply transformations |
-| DELETE | \`/api/images/:id\` | Delete an image |
+| POST | `/api/images` | Upload an image |
+| GET | `/api/images` | Get paginated user images |
+| GET | `/api/images/:id` | Get image metadata |
+| POST | `/api/images/:id/transform` | Apply transformations |
+| DELETE | `/api/images/:id` | Delete an image |
 
 ---
 
 ## Upload Example
 
-**POST** \`/api/images\`
+**POST** `/api/images`
 
 Form-data:
 
-\`\`\`text
+```text
 image: cat.jpg
-\`\`\`
+```
 
 ---
 
 ## Transformation Example
 
-**POST** \`/api/images/:id/transform\`
+**POST** `/api/images/:id/transform`
 
-\`\`\`json
+```json
 {
   "resize": {
     "width": 300,
@@ -233,7 +217,7 @@ image: cat.jpg
   "grayscale": true,
   "format": "webp"
 }
-\`\`\`
+```
 
 ---
 
@@ -241,16 +225,16 @@ image: cat.jpg
 
 | Transformation | Example |
 |---------------|---------|
-| Resize | \`{ "resize": { "width": 300, "height": 300 } }\` |
-| Crop | \`{ "crop": { "x": 0, "y": 0, "width": 100, "height": 100 } }\` |
-| Rotate | \`{ "rotate": 90 }\` |
-| Flip | \`{ "flip": true }\` |
-| Mirror | \`{ "mirror": true }\` |
-| Grayscale | \`{ "grayscale": true }\` |
-| Sepia | \`{ "sepia": true }\` |
-| Blur | \`{ "blur": 2 }\` |
-| Sharpen | \`{ "sharpen": true }\` |
-| Format | \`{ "format": "webp" }\` |
+| Resize | `{ "resize": { "width": 300, "height": 300 } }` |
+| Crop | `{ "crop": { "x": 0, "y": 0, "width": 100, "height": 100 } }` |
+| Rotate | `{ "rotate": 90 }` |
+| Flip | `{ "flip": true }` |
+| Mirror | `{ "mirror": true }` |
+| Grayscale | `{ "grayscale": true }` |
+| Sepia | `{ "sepia": true }` |
+| Blur | `{ "blur": 2 }` |
+| Sharpen | `{ "sharpen": true }` |
+| Format | `{ "format": "webp" }` |
 
 ---
 
@@ -260,9 +244,9 @@ The project includes integration tests for authentication and image uploads.
 
 ### Run the tests
 
-\`\`\`bash
+```bash
 npm test
-\`\`\`
+```
 
 ### Current test coverage
 
@@ -284,13 +268,11 @@ The upload test performs a complete end-to-end flow:
 
 For development, images are stored on the local filesystem:
 
-\`\`\`text
+```text
 uploads/
 ├── originals/
-└── transformed/
-\`\`\`
-
-> **Note:** This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) can be added for production deployments.
+└── transformed/ Note: This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) is planned for production use.
+```
 
 ---
 
@@ -298,16 +280,16 @@ uploads/
 
 ### Image Model
 
-- \`owner\`
-- \`filename\`
-- \`path\`
-- \`mimetype\`
-- \`size\`
-- \`width\`
-- \`height\`
-- \`isOriginal\`
-- \`originalImage\`
-- \`transformationParams\`
+- `owner`
+- `filename`
+- `path`
+- `mimetype`
+- `size`
+- `width`
+- `height`
+- `isOriginal`
+- `originalImage`
+- `transformationParams`
 
 Indexes are added to improve pagination and enable faster lookup of transformed images.
 
@@ -315,7 +297,7 @@ Indexes are added to improve pagination and enable faster lookup of transformed 
 
 ## Example Response
 
-\`\`\`json
+```json
 {
   "success": true,
   "message": "Image transformed successfully.",
@@ -327,7 +309,7 @@ Indexes are added to improve pagination and enable faster lookup of transformed 
     "isOriginal": false
   }
 }
-\`\`\`
+```
 
 ---
 
@@ -343,7 +325,6 @@ While building this project, I learned how to:
 - connect original and transformed images
 - implement caching-friendly logic
 - document APIs with Swagger
-- write and run integration tests with Jest and Supertest
 
 ---
 
