@@ -1,0 +1,306 @@
+# Image Processing Service
+
+![Node.js](https://img.shields.io/badge/Node.js-20-green)
+![Express](https://img.shields.io/badge/Express-5-black)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
+
+A backend API for uploading, transforming, and managing images using **Node.js, Express, MongoDB, Multer, Sharp, and JWT authentication**.
+
+I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored authentication with JWT, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design for managing original and transformed images, and API documentation with Swagger. The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
+
+---
+
+## Features
+
+### Authentication
+
+- User registration and login with JWT
+- Protected image routes
+
+### Image Uploads
+
+- Secure image uploads with Multer
+- File type validation
+- File size limits
+
+### Image Transformations
+
+- Resize
+- Crop
+- Rotate
+- Flip and mirror
+- Grayscale and sepia
+- Blur and sharpen
+- Convert to JPEG, PNG, or WebP
+
+### Performance
+
+- Reuse previously generated transformed images
+- Hash-based filenames for caching
+- Pagination for image listing
+
+### Security
+
+- Helmet
+- CORS
+- Rate limiting
+- Centralised error handling
+- Joi request validation
+
+### Documentation
+
+- Interactive Swagger / OpenAPI documentation
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|------|------------|
+| Runtime | Node.js |
+| Framework | Express.js |
+| Database | MongoDB + Mongoose |
+| Authentication | JWT |
+| Uploads | Multer |
+| Image Processing | Sharp |
+| Validation | Joi |
+| Documentation | Swagger / OpenAPI |
+| Security | Helmet, express-rate-limit |
+
+---
+
+## Project Structure
+
+```text
+src/
+├── config/
+├── controllers/
+├── errors/
+├── middleware/
+├── models/
+├── routes/
+├── services/
+├── utils/
+├── validators/
+├── app.js
+└── server.js
+```
+
+---
+
+## Architecture
+
+```text
+Client
+   │
+   ▼
+Routes
+   │
+   ▼
+Controllers
+   │
+   ▼
+Services
+   ├── Image Service (database logic)
+   └── Image Processing Service (Sharp transformations)
+   │
+   ▼
+MongoDB
+```
+
+I kept the controllers simple and moved most of the business logic into services. This makes the code easier to maintain and extend.
+
+---
+
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/adarshmishra048/image-processing-service.git
+cd image-processing-service
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Create a `.env` file
+
+```env
+PORT=3000
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret
+NODE_ENV=development
+```
+
+### 4. Run the server
+
+```bash
+npm run dev
+```
+
+The server will start on:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## API Documentation
+
+Swagger UI is available at:
+
+```text
+http://localhost:3000/api/docs
+```
+
+---
+
+## Authentication
+
+After logging in, include the token in the `Authorization` header.
+
+```http
+Authorization: Bearer YOUR_TOKEN
+```
+
+---
+
+## API Endpoints
+
+### Auth
+
+| Method | Endpoint | Description |
+|-------|----------|-------------|
+| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/login` | Login and receive a JWT |
+
+### Images
+
+| Method | Endpoint | Description |
+|-------|----------|-------------|
+| POST | `/api/images` | Upload an image |
+| GET | `/api/images` | Get paginated user images |
+| GET | `/api/images/:id` | Get image metadata |
+| POST | `/api/images/:id/transform` | Apply transformations |
+| DELETE | `/api/images/:id` | Delete an image |
+
+---
+
+## Upload Example
+
+**POST** `/api/images`
+
+Form-data:
+
+```text
+image: cat.jpg
+```
+
+---
+
+## Transformation Example
+
+**POST** `/api/images/:id/transform`
+
+```json
+{
+  "resize": {
+    "width": 300,
+    "height": 300
+  },
+  "grayscale": true,
+  "format": "webp"
+}
+```
+
+---
+
+## Supported Transformations
+
+| Transformation | Example |
+|---------------|---------|
+| Resize | `{ "resize": { "width": 300, "height": 300 } }` |
+| Crop | `{ "crop": { "x": 0, "y": 0, "width": 100, "height": 100 } }` |
+| Rotate | `{ "rotate": 90 }` |
+| Flip | `{ "flip": true }` |
+| Mirror | `{ "mirror": true }` |
+| Grayscale | `{ "grayscale": true }` |
+| Sepia | `{ "sepia": true }` |
+| Blur | `{ "blur": 2 }` |
+| Sharpen | `{ "sharpen": true }` |
+| Format | `{ "format": "webp" }` |
+
+---
+
+## Storage
+
+For development, images are stored on the local filesystem:
+
+```text
+uploads/
+├── originals/
+└── transformed/
+```
+
+---
+
+## Database Design
+
+### Image Model
+
+- `owner`
+- `filename`
+- `path`
+- `mimetype`
+- `size`
+- `width`
+- `height`
+- `isOriginal`
+- `originalImage`
+- `transformationParams`
+
+Indexes are added for better pagination and faster lookup of transformed images.
+
+---
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "message": "Image transformed successfully.",
+  "image": {
+    "_id": "6890...",
+    "filename": "cat-a1b2c3d4.webp",
+    "width": 300,
+    "height": 300,
+    "isOriginal": false
+  }
+}
+```
+
+---
+
+## What I Learned
+
+While building this project, I learned how to:
+
+- structure an Express application
+- separate controllers and services
+- validate requests correctly
+- secure file uploads
+- process images with Sharp
+- connect original and transformed images
+- implement caching-friendly logic
+- document APIs with Swagger
+
+---
+
+## Thank You
+
+Thank you for taking the time to check out this project. I built it as part of my backend development journey, and I hope it is useful for learning, reviewing, or experimenting with image processing APIs.
