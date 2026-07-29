@@ -1,5 +1,9 @@
 const errorMiddleware = (err, req, res, next) => {
-  console.error(err);
+  
+  // Log errors except during tests
+  if (process.env.NODE_ENV !== "test") {
+    console.error(err);
+  }
 
   let statusCode = err.statusCode || 500;
   let message = err.message || "Internal Server Error";
@@ -76,7 +80,7 @@ const errorMiddleware = (err, req, res, next) => {
     success: false,
     message,
 
-    // Only include stack trace in development
+    // Include stack trace only in development
     ...(process.env.NODE_ENV === "development" && {
       stack: err.stack,
     }),
