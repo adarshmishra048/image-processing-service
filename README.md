@@ -4,6 +4,7 @@
 ![Express](https://img.shields.io/badge/Express-5-black)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![CI](https://github.com/adarshmishra048/image-processing-service/actions/workflows/ci.yml/badge.svg)
 
 A backend API for uploading, transforming, and managing images using **Node.js, Express, MongoDB, Multer, Sharp, and JWT authentication**.
 
