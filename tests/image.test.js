@@ -1,36 +1,43 @@
 const request = require("supertest");
-const path = require("path");
-
+const sharp = require("sharp");
 const app = require("../src/app");
 
 describe("Image API", () => {
   it("should upload an image for an authenticated user", async () => {
-    const unique = Date.now();
-
-    // Register
-    await request(app)
+    // Register user
+    const registerRes = await request(app)
       .post("/api/auth/register")
       .send({
-        username: `user${unique}`,
-        email: `user${unique}@example.com`,
+        username: "testuser" + Date.now(),
+        email: `test${Date.now()}@example.com`,
         password: "password123",
       });
 
     // Login
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({
-        email: `user${unique}@example.com`,
-        password: "password123",
-      });
+    const loginRes = await request(app).post("/api/auth/login").send({
+      email: registerRes.body.user.email,
+      password: "password123",
+    });
 
     const token = loginRes.body.token;
 
-    // Upload
+    // Create a real JPEG buffer
+    const imageBuffer = await sharp({
+      create: {
+        width: 20,
+        height: 20,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 },
+      },
+    })
+      .jpeg()
+      .toBuffer();
+
+    // Upload image
     const uploadRes = await request(app)
       .post("/api/images")
       .set("Authorization", `Bearer ${token}`)
-      .attach("image", path.join(__dirname, "fixtures/test.jpg"));
+      .attach("image", imageBuffer, "test.jpg");
 
     expect(uploadRes.statusCode).toBe(201);
     expect(uploadRes.body.image).toBeDefined();
