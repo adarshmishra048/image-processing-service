@@ -39,6 +39,9 @@ describe("Image API", () => {
       .set("Authorization", `Bearer ${token}`)
       .attach("image", imageBuffer, "test.jpg");
 
+    console.log(uploadRes.statusCode);
+    console.log(uploadRes.body);
+
     expect(uploadRes.statusCode).toBe(201);
     expect(uploadRes.body.image).toBeDefined();
     expect(uploadRes.body.image.filename).toBeDefined();
