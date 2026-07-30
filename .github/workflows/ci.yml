@@ -17,19 +17,18 @@ jobs:
           - 27017:27017
 
     env:
-      PORT: 3000
       MONGODB_URI: mongodb://localhost:27017/test
       JWT_SECRET: testsecret
       NODE_ENV: test
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Use Node.js 20
+      - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
