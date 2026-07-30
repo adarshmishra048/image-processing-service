@@ -7,7 +7,9 @@
 
 A backend API for uploading, transforming, and managing images using **Node.js, Express, MongoDB, Multer, Sharp, and JWT authentication**.
 
-I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored JWT authentication, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design to manage original and transformed images, and API documentation with Swagger. The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
+I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored JWT authentication, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design to manage original and transformed images, and API documentation with Swagger, integration testing, and containerization with Docker.
+
+The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
 
 ---
 
@@ -52,21 +54,30 @@ I built this project to understand how real-world image processing services are 
 
 - Interactive Swagger / OpenAPI documentation
 
+### Docker Support
+
+- Dockerized Node.js application
+- Dockerized MongoDB service
+- Persistent storage with Docker volumes
+- One-command local setup with Docker Compose
+
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|------|------------|
-| Runtime | Node.js |
-| Framework | Express.js |
-| Database | MongoDB + Mongoose |
-| Authentication | JWT |
-| Uploads | Multer |
-| Image Processing | Sharp |
-| Validation | Joi |
-| Documentation | Swagger / OpenAPI |
-| Security | Helmet, express-rate-limit |
+| Layer            | Technology                 |
+| ---------------- | -------------------------- |
+| Runtime          | Node.js                    |
+| Framework        | Express.js                 |
+| Database         | MongoDB + Mongoose         |
+| Authentication   | JWT                        |
+| Uploads          | Multer                     |
+| Image Processing | Sharp                      |
+| Validation       | Joi                        |
+| Documentation    | Swagger / OpenAPI          |
+| Security         | Helmet, express-rate-limit |
+| Testing          | Jest, Supertest            |
+| Containerization | Docker, Docker Compose     |
 
 ---
 
@@ -85,6 +96,15 @@ src/
 ├── validators/
 ├── app.js
 └── server.js
+```
+
+```
+tests/
+├── setup.js
+├── auth.test.js
+├── image.test.js
+└── fixtures/
+       └── test.jpg
 ```
 
 ---
@@ -109,7 +129,7 @@ Services
 MongoDB
 ```
 
-I kept the controllers simple and moved most of the business logic into services. This makes the code easier to maintain and extend.
+I kept the controllers simple and moved most of the business logic into services. This makes the code easier to maintain, test, and extend.
 
 ---
 
@@ -132,7 +152,7 @@ npm install
 
 ```env
 PORT=3000
-MONGO_URI=your_mongodb_connection_string
+MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 NODE_ENV=development
 ```
@@ -151,12 +171,83 @@ http://localhost:3000
 
 ---
 
+## Running with Docker
+
+This project includes Docker support for both the API and MongoDB.
+
+### Docker files
+
+| File                | Purpose                                                  |
+| ------------------- | -------------------------------------------------------- |
+| Dockerfile          | Builds the production-ready Node.js API image            |
+| docker-compose.yml  | Starts the API and MongoDB containers together           |
+| .dockerignore       | Excludes unnecessary files from the Docker build context |
+| .example.docker.env | Example environment variables for Docker setup           |
+
+### Create the Docker environment file
+
+```bash
+cp .example.docker.env .docker.env
+```
+
+Update .docker.env with your own values.
+
+### Start the application
+
+```bash
+docker compose up --build
+```
+
+### Stop the application
+
+```bash
+docker compose down
+```
+
+### Services
+
+- **API:** http://localhost:3000
+- **Swagger:** http://localhost:3000/api-docs
+- **MongoDB:** mongodb://localhost:27017
+
+### Environment file
+
+Docker uses a separate environment file:
+
+```text
+.docker.env
+```
+
+Example:
+
+```env
+PORT=3000
+MONGODB_URI=mongodb://mongo:27017/image-processing-service
+JWT_SECRET=your_jwt_secret
+NODE_ENV=production
+CLIENT_URL=http://localhost:5173
+```
+
+### Persistent storage
+
+Uploaded images are stored in a mounted Docker volume:
+
+```text
+uploads/
+├── originals/
+└── transformed/
+```
+
+MongoDB data is also persisted using a named Docker volume.
+
+---
+
 ## API Documentation
 
 Swagger UI is available at:
 
 ```text
-http://localhost:3000/api/docs
+http://localhost:3000/api-docs
 ```
 
 ---
@@ -175,20 +266,20 @@ Authorization: Bearer YOUR_TOKEN
 
 ### Auth
 
-| Method | Endpoint | Description |
-|-------|----------|-------------|
-| POST | `/api/auth/register` | Register a new user |
-| POST | `/api/auth/login` | Login and receive a JWT |
+| Method | Endpoint             | Description             |
+| ------ | -------------------- | ----------------------- |
+| POST   | `/api/auth/register` | Register a new user     |
+| POST   | `/api/auth/login`    | Login and receive a JWT |
 
 ### Images
 
-| Method | Endpoint | Description |
-|-------|----------|-------------|
-| POST | `/api/images` | Upload an image |
-| GET | `/api/images` | Get paginated user images |
-| GET | `/api/images/:id` | Get image metadata |
-| POST | `/api/images/:id/transform` | Apply transformations |
-| DELETE | `/api/images/:id` | Delete an image |
+| Method | Endpoint                    | Description               |
+| ------ | --------------------------- | ------------------------- |
+| POST   | `/api/images`               | Upload an image           |
+| GET    | `/api/images`               | Get paginated user images |
+| GET    | `/api/images/:id`           | Get image metadata        |
+| POST   | `/api/images/:id/transform` | Apply transformations     |
+| DELETE | `/api/images/:id`           | Delete an image           |
 
 ---
 
@@ -223,18 +314,18 @@ image: cat.jpg
 
 ## Supported Transformations
 
-| Transformation | Example |
-|---------------|---------|
-| Resize | `{ "resize": { "width": 300, "height": 300 } }` |
-| Crop | `{ "crop": { "x": 0, "y": 0, "width": 100, "height": 100 } }` |
-| Rotate | `{ "rotate": 90 }` |
-| Flip | `{ "flip": true }` |
-| Mirror | `{ "mirror": true }` |
-| Grayscale | `{ "grayscale": true }` |
-| Sepia | `{ "sepia": true }` |
-| Blur | `{ "blur": 2 }` |
-| Sharpen | `{ "sharpen": true }` |
-| Format | `{ "format": "webp" }` |
+| Transformation | Example                                                       |
+| -------------- | ------------------------------------------------------------- |
+| Resize         | `{ "resize": { "width": 300, "height": 300 } }`               |
+| Crop           | `{ "crop": { "x": 0, "y": 0, "width": 100, "height": 100 } }` |
+| Rotate         | `{ "rotate": 90 }`                                            |
+| Flip           | `{ "flip": true }`                                            |
+| Mirror         | `{ "mirror": true }`                                          |
+| Grayscale      | `{ "grayscale": true }`                                       |
+| Sepia          | `{ "sepia": true }`                                           |
+| Blur           | `{ "blur": 2 }`                                               |
+| Sharpen        | `{ "sharpen": true }`                                         |
+| Format         | `{ "format": "webp" }`                                        |
 
 ---
 
@@ -251,7 +342,10 @@ npm test
 ### Current test coverage
 
 - User registration
+- User login
 - Authenticated image upload
+
+### End-to-end upload flow
 
 The upload test performs a complete end-to-end flow:
 
@@ -271,8 +365,10 @@ For development, images are stored on the local filesystem:
 ```text
 uploads/
 ├── originals/
-└── transformed/ Note: This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) is planned for production use.
+└── transformed/
 ```
+
+> **Note:** This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) is planned for production use.
 
 ---
 
@@ -325,6 +421,8 @@ While building this project, I learned how to:
 - connect original and transformed images
 - implement caching-friendly logic
 - document APIs with Swagger
+- write integration tests with Jest and Supertest
+- containerize a Node.js application with Docker and Docker Compose
 
 ---
 

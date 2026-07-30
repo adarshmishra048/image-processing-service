@@ -1,5 +1,6 @@
 node_modules
 .env
+.docker.env
 uploads
 NOTES.md
 .DS_Store
