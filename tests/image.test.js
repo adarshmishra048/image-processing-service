@@ -35,15 +35,15 @@ describe("Image API", () => {
 
     // Upload image
     const uploadRes = await request(app)
-      .post("/api/images")
-      .set("Authorization", `Bearer ${token}`)
-      .attach("image", imageBuffer, "test.jpg");
+  .post("/api/images")
+  .set("Authorization", `Bearer ${token}`)
+  .attach("image", imageBuffer, "test.jpg");
 
-    console.log("STATUS:", uploadRes.statusCode);
-    console.log("BODY:", JSON.stringify(uploadRes.body, null, 2));
+console.log("STATUS:", uploadRes.statusCode);
+console.log("BODY:", JSON.stringify(uploadRes.body, null, 2));
 
-    expect(uploadRes.statusCode).toBe(201);
-    expect(uploadRes.body.image).toBeDefined();
-    expect(uploadRes.body.image.filename).toBeDefined();
+expect(uploadRes.statusCode).toBe(201);
+expect(uploadRes.body.image).toBeDefined();
+expect(uploadRes.body.image.filename).toBeDefined();
   });
 });
