@@ -6,7 +6,7 @@ const errorMiddleware = require("./middleware/errorMiddleware");
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
-
+const requestLogger = require("./middleware/requestLogger");
 
 const {
   helmetMiddleware,
@@ -23,6 +23,7 @@ const app = express();
  */
 app.use(helmetMiddleware);
 app.use(corsMiddleware);
+app.use(requestLogger);
 
 /**
  * JSON Body Parser (1MB limit)

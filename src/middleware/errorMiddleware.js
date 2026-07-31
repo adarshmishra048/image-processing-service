@@ -1,8 +1,10 @@
+const logger = require("../utils/logger");
+
 const errorMiddleware = (err, req, res, next) => {
   
   // Log errors except during tests
   if (process.env.NODE_ENV !== "test") {
-    console.error(err);
+    logger.error(err);
   }
 
   let statusCode = err.statusCode || 500;
