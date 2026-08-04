@@ -16,9 +16,12 @@ sharp.concurrency(2); // Safer on small VPS instances
 const applyResize = (image, resize) => {
   if (!resize) return image;
 
+  const width = Number(resize.width);
+  const height = Number(resize.height);
+
   return image.resize({
-    width: Number(resize.width),
-    height: Number(resize.height),
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null,
     fit: resize.fit || "cover",
     withoutEnlargement: true,
   });
@@ -30,11 +33,20 @@ const applyResize = (image, resize) => {
 const applyCrop = (image, crop) => {
   if (!crop) return image;
 
+  const left = Number(crop.x);
+  const top = Number(crop.y);
+  const width = Number(crop.width);
+  const height = Number(crop.height);
+
+  if (![left, top, width, height].every(Number.isFinite)) {
+    throw new ApiError(400, "Invalid crop parameters.");
+  }
+
   return image.extract({
-    left: Number(crop.x),
-    top: Number(crop.y),
-    width: Number(crop.width),
-    height: Number(crop.height),
+    left,
+    top,
+    width,
+    height,
   });
 };
 
@@ -42,7 +54,7 @@ const applyCrop = (image, crop) => {
 // Rotate
 // ------------------------------
 const applyRotate = (image, angle) => {
-  if (angle === undefined) return image;
+  if (angle === undefined || angle === null) return image;
 
   return image.rotate(Number(angle));
 };
@@ -77,13 +89,12 @@ const applySepia = (image, sepia) => {
 // Blur / Sharpen
 // ------------------------------
 const applyBlur = (image, blur) => {
-  if (!blur) return image;
+  if (blur === undefined || blur === null || blur === false) return image;
 
   return image.blur(typeof blur === "number" ? blur : undefined);
 };
 
-const applySharpen = (image, sharpen) =>
-  sharpen ? image.sharpen() : image;
+const applySharpen = (image, sharpen) => (sharpen ? image.sharpen() : image);
 
 // ------------------------------
 // Format
@@ -128,26 +139,46 @@ const applyFormat = (image, format) => {
 };
 
 // ------------------------------
+// Deterministic object sorting
+// ------------------------------
+const sortObject = (obj) => {
+  if (Array.isArray(obj)) {
+    return obj.map(sortObject);
+  }
+
+  if (obj && typeof obj === "object") {
+    return Object.keys(obj)
+      .filter((key) => obj[key] !== undefined)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = sortObject(obj[key]);
+        return acc;
+      }, {});
+  }
+
+  return obj;
+};
+
+// ------------------------------
 // Stable transformation hash
 // ------------------------------
-const createTransformHash = (transformations) => {
+const createTransformHash = (transformations = {}) => {
+  const normalized = JSON.stringify(sortObject(transformations));
+
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify(transformations))
+    .update(normalized)
     .digest("hex")
-    .slice(0, 12);
+    .slice(0, 16);
 };
 
 // ------------------------------
 // Build filename
 // ------------------------------
-const buildFilename = (inputPath, transformations, extension) => {
+const buildFilename = (inputPath, hash, extension) => {
   const baseName = path.basename(inputPath, path.extname(inputPath));
 
-  const hash = createTransformHash(transformations);
-
-  const finalExt =
-    extension || path.extname(inputPath).replace(".", "");
+  const finalExt = extension || path.extname(inputPath).replace(".", "");
 
   return `${baseName}-${hash}.${finalExt}`;
 };
@@ -155,13 +186,15 @@ const buildFilename = (inputPath, transformations, extension) => {
 // ------------------------------
 // Main transform function
 // ------------------------------
-const transformImage = async (inputPath, transformations) => {
+const transformImage = async (inputPath, transformations = {}) => {
   // Ensure input exists
   try {
     await fs.access(inputPath);
   } catch {
     throw new ApiError(404, "Source image not found.");
   }
+
+  const hash = createTransformHash(transformations);
 
   let image = sharp(inputPath);
 
@@ -179,13 +212,13 @@ const transformImage = async (inputPath, transformations) => {
   // Apply output format
   const { image: processedImage, extension } = applyFormat(
     image,
-    transformations.format
+    transformations.format,
   );
 
   // Generate deterministic filename
-  const filename = buildFilename(inputPath, transformations, extension);
+  const filename = buildFilename(inputPath, hash, extension);
 
-  const outputDir = path.join("uploads", "transformed");
+  const outputDir = path.resolve("uploads/transformed");
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputPath = path.join(outputDir, filename);
@@ -201,14 +234,16 @@ const transformImage = async (inputPath, transformations) => {
   const metadata = await sharp(outputPath).metadata();
   const stats = await fs.stat(outputPath);
 
+  const format = metadata.format === "jpeg" ? "jpeg" : metadata.format;
+
   return {
     filename,
-    path: outputPath,
-    mimetype: `image/${metadata.format}`,
+    path: path.join("uploads", "transformed", filename),
+    mimetype: `image/${format}`,
     size: stats.size,
     width: metadata.width,
     height: metadata.height,
-    hash: createTransformHash(transformations),
+    hash,
   };
 };
 

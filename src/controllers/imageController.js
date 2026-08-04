@@ -15,10 +15,7 @@ const uploadImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No image uploaded.");
   }
 
-  const image = await imageService.createImageFromUpload(
-    req.file,
-    req.user.id
-  );
+  const image = await imageService.createImageFromUpload(req.file, req.user.id);
 
   res.status(201).json({
     success: true,
@@ -34,45 +31,55 @@ const uploadImage = asyncHandler(async (req, res) => {
  */
 const transformUploadedImage = asyncHandler(async (req, res) => {
   // Get the image and verify ownership
-  const image = await imageService.getUserImage(
-    req.params.id,
-    req.user.id
-  );
+  const image = await imageService.getUserImage(req.params.id, req.user.id);
 
   // Apply transformations
   const transformed = await imageProcessingService.transformImage(
     image.path,
-    req.body
+    req.body,
   );
 
-  // Save transformed image metadata
-  const savedImage = await imageService.createImage({
-    owner: image.owner,
+  // Determine the original image ID
+  const originalImageId = image.isOriginal ? image._id : image.originalImage;
 
-    originalName: image.originalName,
+  // Check cache first
+  const existing = await imageService.findExistingTransformedImage(
+    originalImageId,
+    transformed.hash,
+  );
 
-    filename: transformed.filename,
+  if (existing) {
+    return res.status(200).json({
+      success: true,
+      message: "Cached transformed image returned.",
+      image: existing,
+    });
+  }
 
-    path: transformed.path,
+  // Save transformed image metadata safely
+  const savedImage = await imageService.createTransformedImageIfNotExists({
+    originalImageId,
+    transformHash: transformed.hash,
 
-    mimetype: transformed.mimetype,
+    imageData: {
+      owner: image.owner,
 
-    size: transformed.size,
+      originalName: image.originalName,
 
-    width: transformed.width,
+      filename: transformed.filename,
 
-    height: transformed.height,
+      path: transformed.path,
 
-    // Mark as transformed image
-    isOriginal: false,
+      mimetype: transformed.mimetype,
 
-    // Link back to the original upload
-    originalImage: image.isOriginal
-      ? image._id
-      : image.originalImage,
+      size: transformed.size,
 
-    // Store transformation parameters for caching/auditing
-    transformationParams: req.body,
+      width: transformed.width,
+
+      height: transformed.height,
+
+      transformationParams: req.body,
+    },
   });
 
   res.status(201).json({
@@ -90,16 +97,9 @@ const transformUploadedImage = asyncHandler(async (req, res) => {
 const getUserImages = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
 
-  const limit = Math.min(
-    Math.max(Number(req.query.limit) || 10, 1),
-    100
-  );
+  const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
 
-  const result = await imageService.getUserImages(
-    req.user.id,
-    page,
-    limit
-  );
+  const result = await imageService.getUserImages(req.user.id, page, limit);
 
   res.status(200).json({
     success: true,
@@ -121,10 +121,7 @@ const getUserImages = asyncHandler(async (req, res) => {
  * @access Private
  */
 const getImageById = asyncHandler(async (req, res) => {
-  const image = await imageService.getUserImage(
-    req.params.id,
-    req.user.id
-  );
+  const image = await imageService.getUserImage(req.params.id, req.user.id);
 
   res.status(200).json({
     success: true,
@@ -138,10 +135,7 @@ const getImageById = asyncHandler(async (req, res) => {
  * @access Private
  */
 const deleteImage = asyncHandler(async (req, res) => {
-  await imageService.deleteUserImage(
-    req.params.id,
-    req.user.id
-  );
+  await imageService.deleteUserImage(req.params.id, req.user.id);
 
   res.status(200).json({
     success: true,

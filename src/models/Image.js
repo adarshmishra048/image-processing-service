@@ -66,6 +66,13 @@ const imageSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Stable hash of transformation parameters for cache lookup
+    transformHash: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
     // Store transformation parameters for caching/auditing
     transformationParams: {
       type: mongoose.Schema.Types.Mixed,
@@ -74,7 +81,7 @@ const imageSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index for efficient pagination
@@ -82,5 +89,17 @@ imageSchema.index({ owner: 1, createdAt: -1 });
 
 // Index for retrieving transformed variants of an original
 imageSchema.index({ originalImage: 1, createdAt: -1 });
+
+// Compound cache index: one transformed variant per original + hash
+imageSchema.index(
+  { originalImage: 1, transformHash: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      originalImage: { $type: "objectId" },
+      transformHash: { $type: "string" },
+    },
+  },
+);
 
 module.exports = mongoose.model("Image", imageSchema);

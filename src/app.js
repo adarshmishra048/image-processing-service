@@ -2,11 +2,13 @@ const express = require("express");
 
 const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
+const healthRoutes = require("./routes/healthRoutes");
+
 const errorMiddleware = require("./middleware/errorMiddleware");
+const requestLogger = require("./middleware/requestLogger");
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
-const requestLogger = require("./middleware/requestLogger");
 
 const {
   helmetMiddleware,
@@ -23,7 +25,17 @@ const app = express();
  */
 app.use(helmetMiddleware);
 app.use(corsMiddleware);
+
+/**
+ * Request Logging
+ */
 app.use(requestLogger);
+
+/**
+ * Health routes
+ * Keep these before the rate limiter.
+ */
+app.use(healthRoutes);
 
 /**
  * JSON Body Parser (1MB limit)
@@ -31,18 +43,20 @@ app.use(requestLogger);
 app.use(express.json({ limit: "1mb" }));
 
 /**
- * Global API Rate Limiter
- */
-app.use(apiLimiter);
-
-/**
  * Swagger Documentation
+ * Exposed without rate limiting.
  */
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 /**
+ * Global API Rate Limiter
+ * Applied only to application APIs.
+ */
+app.use("/api", apiLimiter);
+
+/**
  * ==========================
- * Routes
+ * Application Routes
  * ==========================
  */
 app.use("/api/auth", authRoutes);
@@ -50,18 +64,12 @@ app.use("/api/images", imageRoutes);
 
 /**
  * ==========================
- * Health & Info Routes
+ * Info Routes
  * ==========================
  */
 app.get("/", (req, res) => {
   res.json({
     message: "Image Processing Service API",
-  });
-});
-
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
   });
 });
 

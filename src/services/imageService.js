@@ -15,7 +15,17 @@ const createImage = async (imageData) => {
  * Create an image document from an uploaded file
  */
 const createImageFromUpload = async (file, userId) => {
-  const metadata = await sharp(file.path).metadata();
+  if (!file) {
+    throw new ApiError(400, "Image file is required.");
+  }
+
+  let metadata;
+
+  try {
+    metadata = await sharp(file.path).metadata();
+  } catch (error) {
+    throw new ApiError(400, "Invalid or corrupted image file.");
+  }
 
   return await Image.create({
     owner: userId,
@@ -46,7 +56,7 @@ const getUserImage = async (imageId, userId) => {
     throw new ApiError(404, "Image not found.");
   }
 
-  if (image.owner.toString() !== userId) {
+  if (String(image.owner) !== String(userId)) {
     throw new ApiError(403, "Access denied.");
   }
 
@@ -57,21 +67,22 @@ const getUserImage = async (imageId, userId) => {
  * Get paginated images for a user
  */
 const getUserImages = async (userId, page = 1, limit = 10) => {
-  page = Math.max(Number(page), 1);
-  limit = Math.min(Math.max(Number(limit), 1), 100);
+  page = Number(page);
+  limit = Number(limit);
+
+  if (!Number.isFinite(page) || page < 1) page = 1;
+  if (!Number.isFinite(limit) || limit < 1) limit = 10;
+
+  limit = Math.min(limit, 100);
 
   const skip = (page - 1) * limit;
 
-  const totalImages = await Image.countDocuments({
-    owner: userId,
-  });
+  const filter = { owner: userId };
 
-  const images = await Image.find({
-    owner: userId,
-  })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  const [totalImages, images] = await Promise.all([
+    Image.countDocuments(filter),
+    Image.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+  ]);
 
   return {
     totalImages,
@@ -83,15 +94,70 @@ const getUserImages = async (userId, page = 1, limit = 10) => {
 };
 
 /**
+ * Find an existing transformed image by original image + hash
+ */
+const findExistingTransformedImage = async (originalImageId, transformHash) => {
+  return await Image.findOne({
+    originalImage: originalImageId,
+    transformHash,
+  });
+};
+
+/**
+ * Create a transformed image only if it does not already exist
+ */
+const createTransformedImageIfNotExists = async ({
+  originalImageId,
+  transformHash,
+  imageData,
+}) => {
+  const existing = await findExistingTransformedImage(
+    originalImageId,
+    transformHash,
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  return await Image.create({
+    ...imageData,
+    originalImage: originalImageId,
+    transformHash,
+    isOriginal: false,
+  });
+};
+
+/**
  * Delete an image (database + file)
  */
 const deleteUserImage = async (imageId, userId) => {
   const image = await getUserImage(imageId, userId);
 
+  // Delete transformed variants if this is an original image
+  if (image.isOriginal) {
+    const variants = await Image.find({
+      originalImage: image._id,
+    }).lean();
+
+    await Promise.all(
+      variants.map(async (variant) => {
+        try {
+          await fs.unlink(variant.path);
+        } catch {
+          // Ignore missing files
+        }
+
+        await Image.deleteOne({ _id: variant._id });
+      }),
+    );
+  }
+
+  // Delete main file
   try {
     await fs.unlink(image.path);
-  } catch (error) {
-    console.warn("Image file not found:", image.path);
+  } catch {
+    // Ignore missing files
   }
 
   await image.deleteOne();
@@ -105,5 +171,7 @@ module.exports = {
   findImageById,
   getUserImage,
   getUserImages,
+  findExistingTransformedImage,
+  createTransformedImageIfNotExists,
   deleteUserImage,
 };

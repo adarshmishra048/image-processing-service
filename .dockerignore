@@ -1,8 +1,17 @@
 node_modules
 npm-debug.log
+
+.env
 .docker.env
+
 uploads
+logs
+
 tests
 coverage
+
 .git
 .gitignore
+
+README.md
+NOTES.md
