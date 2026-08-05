@@ -9,6 +9,7 @@ const { transformLimiter } = require("../config/security");
 
 const {
   uploadImage,
+  previewImage,
   transformUploadedImage,
   getUserImages,
   getImageById,
@@ -101,6 +102,56 @@ router.get("/:id", authMiddleware, getImageById);
 
 /**
  * @swagger
+ * /api/images/{id}/preview:
+ *   get:
+ *     summary: Preview transformed image without saving
+ *     tags: [Images]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: width
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: height
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: rotate
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: grayscale
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: sepia
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: blur
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Preview image
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Image not found
+ */
+router.get("/:id/preview", authMiddleware, previewImage);
+
+/**
+ * @swagger
  * /api/images/{id}/transform:
  *   post:
  *     summary: Apply transformations to an image
@@ -133,6 +184,12 @@ router.get("/:id", authMiddleware, getImageById);
  *               grayscale:
  *                 type: boolean
  *                 example: true
+ *               sepia:
+ *                 type: boolean
+ *                 example: false
+ *               blur:
+ *                 type: number
+ *                 example: 1
  *               format:
  *                 type: string
  *                 example: webp

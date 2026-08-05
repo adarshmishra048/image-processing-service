@@ -143,8 +143,60 @@ const deleteImage = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc Preview transformed image without saving
+ * @route GET /api/images/:id/preview
+ * @access Private
+ */
+const previewImage = asyncHandler(async (req, res) => {
+  const image = await imageService.getUserImage(req.params.id, req.user.id);
+
+  const transformations = {};
+
+  if (req.query.width || req.query.height) {
+    transformations.resize = {
+      width: req.query.width ? Number(req.query.width) : undefined,
+      height: req.query.height ? Number(req.query.height) : undefined,
+    };
+  }
+
+  if (req.query.rotate) {
+    transformations.rotate = Number(req.query.rotate);
+  }
+
+  if (req.query.grayscale === "true") {
+    transformations.grayscale = true;
+  }
+
+  if (req.query.sepia === "true") {
+    transformations.sepia = true;
+  }
+
+  if (req.query.blur) {
+    const blur = Number(req.query.blur);
+
+    if (!Number.isNaN(blur) && blur >= 0.3) {
+      transformations.blur = blur;
+    }
+  }
+
+  if (req.query.format) {
+    transformations.format = req.query.format;
+  }
+
+  const preview = await imageProcessingService.previewImageBuffer(
+    image.path,
+    transformations,
+  );
+
+  res.setHeader("Content-Type", preview.mimetype);
+
+  res.send(preview.buffer);
+});
+
 module.exports = {
   uploadImage,
+  previewImage,
   transformUploadedImage,
   getUserImages,
   getImageById,

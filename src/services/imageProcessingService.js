@@ -247,6 +247,38 @@ const transformImage = async (inputPath, transformations = {}) => {
   };
 };
 
+// ------------------------------
+// Preview buffer (no file saved)
+// ------------------------------
+const previewImageBuffer = async (inputPath, transformations = {}) => {
+  let image = sharp(inputPath);
+
+  image = applyResize(image, transformations.resize);
+  image = applyCrop(image, transformations.crop);
+  image = applyRotate(image, transformations.rotate);
+  image = applyFlip(image, transformations.flip);
+  image = applyMirror(image, transformations.mirror);
+  image = applyGrayscale(image, transformations.grayscale);
+  image = applySepia(image, transformations.sepia);
+  image = applyBlur(image, transformations.blur);
+  image = applySharpen(image, transformations.sharpen);
+
+  const { image: processedImage, extension } = applyFormat(
+    image,
+    transformations.format,
+  );
+
+  const buffer = await processedImage.toBuffer();
+
+  const format = extension || "jpeg";
+
+  return {
+    buffer,
+    mimetype: `image/${format}`,
+  };
+};
+
 module.exports = {
   transformImage,
+  previewImageBuffer,
 };
