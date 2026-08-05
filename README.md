@@ -1,6 +1,6 @@
 # Image Processing Service
 
-![Node.js](https://img.shields.io/badge/Node.js-20-green)
+![Node.js](https://img.shields.io/badge/Node.js-22-green)
 ![Express](https://img.shields.io/badge/Express-5-black)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -11,6 +11,15 @@ A backend API for uploading, transforming, and managing images using **Node.js, 
 I built this project to understand how real-world image processing services are designed and implemented. Through this project, I explored JWT authentication, request validation, secure file uploads, image transformation pipelines using Sharp, caching strategies for generated images, database design to manage original and transformed images, and API documentation with Swagger, integration testing, and containerization with Docker.
 
 The goal was not only to build a working application but also to learn how to structure a scalable and maintainable backend service.
+
+---
+
+## Live Demo
+
+- **Production API:** https://image-processing-service-8wui.onrender.com
+- **Swagger Docs:** https://image-processing-service-8wui.onrender.com/api-docs
+- **Health Check:** https://image-processing-service-8wui.onrender.com/livez
+- **Readiness Check:** https://image-processing-service-8wui.onrender.com/readyz
 
 ---
 
@@ -42,6 +51,11 @@ The goal was not only to build a working application but also to learn how to st
 - Reuse previously generated transformed images
 - Hash-based filenames for caching
 - Pagination for image listing
+
+### Logging
+
+- Structured logging with Winston
+- Console and file logging
 
 ### Security
 
@@ -79,12 +93,15 @@ The goal was not only to build a working application but also to learn how to st
 | Security         | Helmet, express-rate-limit |
 | Testing          | Jest, Supertest            |
 | Containerization | Docker, Docker Compose     |
+| Logging          | Winston                    |
 
 ---
 
 ## Project Structure
 
 ```text
+logs/
+
 src/
 ├── config/
 ├── controllers/
@@ -97,15 +114,17 @@ src/
 ├── validators/
 ├── app.js
 └── server.js
-```
 
-```
 tests/
 ├── setup.js
 ├── auth.test.js
 ├── image.test.js
 └── fixtures/
-       └── test.jpg
+    └── test.jpg
+
+uploads/
+├── originals/
+└── transformed/
 ```
 
 ---
@@ -245,10 +264,16 @@ MongoDB data is also persisted using a named Docker volume.
 
 ## API Documentation
 
-Swagger UI is available at:
+Swagger UI is available at (Local):
 
 ```text
 http://localhost:3000/api-docs
+```
+
+Production
+
+```text
+https://image-processing-service-8wui.onrender.com/api-docs
 ```
 
 ---
@@ -260,6 +285,35 @@ After logging in, include the token in the `Authorization` header.
 ```http
 Authorization: Bearer YOUR_TOKEN
 ```
+
+---
+
+## Quick API Test
+
+### Register
+
+**POST** `/api/auth/register`
+
+```json
+{
+  "name": "Name",
+  "email": "name@example.com",
+  "password": "Password123!"
+}
+```
+
+### Login
+
+**POST** `/api/auth/login`
+
+```json
+{
+  "email": "name@example.com",
+  "password": "Password123!"
+}
+```
+
+Use the returned JWT token in subsequent requests.
 
 ---
 
@@ -281,6 +335,13 @@ Authorization: Bearer YOUR_TOKEN
 | GET    | `/api/images/:id`           | Get image metadata        |
 | POST   | `/api/images/:id/transform` | Apply transformations     |
 | DELETE | `/api/images/:id`           | Delete an image           |
+
+### Health Endpoints
+
+| Method | Endpoint  | Description                    |
+| ------ | --------- | ------------------------------ |
+| GET    | `/livez`  | Liveness probe                 |
+| GET    | `/readyz` | Readiness probe (checks Mongo) |
 
 ---
 
@@ -369,7 +430,7 @@ uploads/
 └── transformed/
 ```
 
-> **Note:** This project currently uses local filesystem storage for development. Cloud storage (Cloudflare R2 or AWS S3) is planned for production use.
+> **Note:** Local filesystem storage is used for development. On Render's free tier, local files are ephemeral and may be lost after redeploys or restarts. Cloud storage such as Cloudflare R2 or AWS S3 is recommended for production deployments.
 
 ---
 
@@ -410,20 +471,47 @@ Indexes are added to improve pagination and enable faster lookup of transformed 
 
 ---
 
+## Deployment
+
+The application is deployed on **Render** using a **Docker container** and connected to **MongoDB Atlas**.
+
+### Production stack
+
+- Render (Web Service)
+- Docker
+- MongoDB Atlas
+- GitHub Actions CI
+
+### Required environment variables
+
+```env
+PORT=3000
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret
+NODE_ENV=production
+```
+
+---
+
 ## What I Learned
 
 While building this project, I learned how to:
 
-- structure an Express application
-- separate controllers and services
-- validate requests correctly
-- secure file uploads
-- process images with Sharp
-- connect original and transformed images
-- implement caching-friendly logic
-- document APIs with Swagger
-- write integration tests with Jest and Supertest
-- containerize a Node.js application with Docker and Docker Compose
+- Structure an Express application
+- Separate controllers and services
+- Validate requests correctly
+- Secure file uploads
+- Process images with Sharp
+- Connect original and transformed images
+- Implement caching-friendly logic
+- Document APIs with Swagger
+- Write integration tests with Jest and Supertest
+- Containerize a Node.js application with Docker and Docker Compose
+- Implement health checks for container platforms
+- Add structured logging with Winston 
+- Deploy a Dockerized API to Render 
+- Connect a production app to MongoDB Atlas 
+- Configure CI with GitHub Actions
 
 ---
 
