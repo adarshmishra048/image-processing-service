@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 
 const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
@@ -53,6 +54,8 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
  * Applied only to application APIs.
  */
 app.use("/api", apiLimiter);
+
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 /**
  * ==========================
