@@ -68,8 +68,22 @@ const helmetMiddleware = helmet({
 /**
  * CORS configuration
  */
+const allowedOrigins = [
+  "http://localhost:5173", // Vite frontend
+  "https://image-processing-service-8wui.onrender.com", // Backend itself
+];
+
 const corsMiddleware = cors({
-  origin: process.env.NODE_ENV === "production" ? process.env.CLIENT_URL : "*",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Postman, curl, mobile apps)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
 
   credentials: true,
 });
