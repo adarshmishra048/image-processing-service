@@ -18,7 +18,7 @@ const transformSchema = Joi.object({
 
   crop: cropSchema.optional(),
 
-  rotate: Joi.number().valid(0, 90, 180, 270, 360).optional(),
+  rotate: Joi.number().min(0).max(360).optional(),
 
   flip: Joi.boolean().optional(),
 
