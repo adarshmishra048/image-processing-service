@@ -12,6 +12,7 @@ const {
   previewImage,
   transformUploadedImage,
   getUserImages,
+  getGroupedImages,
   getImageById,
   deleteImage,
 } = require("../controllers/imageController");
@@ -77,6 +78,20 @@ router.post("/", authMiddleware, upload.single("image"), uploadImage);
  *         description: Unauthorized
  */
 router.get("/", authMiddleware, getUserImages);
+
+/**
+ * @swagger
+ * /api/images/grouped:
+ *   get:
+ *     summary: Get user images grouped by original and variants
+ *     tags: [Images]
+ *     responses:
+ *       200:
+ *         description: Grouped image history
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/grouped", authMiddleware, getGroupedImages);
 
 /**
  * @swagger

@@ -116,6 +116,44 @@ const getUserImages = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc Get user images grouped by original + variants
+ * @route GET /api/images/grouped
+ * @access Private
+ */
+const getGroupedImages = asyncHandler(async (req, res) => {
+  const result = await imageService.getUserImages(req.user.id, 1, 1000);
+
+  const images = result.images;
+
+  // Originals first
+  const originals = images.filter((img) => img.isOriginal);
+
+  const grouped = originals.map((original) => {
+    const variants = images
+      .filter(
+        (img) =>
+          !img.isOriginal && String(img.originalImage) === String(original._id),
+      )
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return {
+      original,
+      variants,
+    };
+  });
+
+  // Sort groups by newest original first
+  grouped.sort(
+    (a, b) => new Date(b.original.createdAt) - new Date(a.original.createdAt),
+  );
+
+  res.status(200).json({
+    success: true,
+    groups: grouped,
+  });
+});
+
+/**
  * @desc Get image by ID
  * @route GET /api/images/:id
  * @access Private
@@ -199,6 +237,7 @@ module.exports = {
   previewImage,
   transformUploadedImage,
   getUserImages,
+  getGroupedImages,
   getImageById,
   deleteImage,
 };
