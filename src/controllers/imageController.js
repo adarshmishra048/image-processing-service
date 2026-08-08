@@ -222,6 +222,14 @@ const previewImage = asyncHandler(async (req, res) => {
     transformations.format = req.query.format;
   }
 
+  if (req.query.crop) {
+    try {
+      transformations.crop = JSON.parse(req.query.crop);
+    } catch {
+      throw new ApiError(400, "Invalid crop parameters.");
+    }
+  }
+
   const preview = await imageProcessingService.previewImageBuffer(
     image.path,
     transformations,

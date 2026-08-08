@@ -215,8 +215,8 @@ const transformImage = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
   // Apply transformations
-  image = applyResize(image, transformations.resize);
   image = await applyCrop(image, transformations.crop);
+  image = applyResize(image, transformations.resize);
   image = applyRotate(image, transformations.rotate);
   image = applyFlip(image, transformations.flip);
   image = applyMirror(image, transformations.mirror);
@@ -267,8 +267,8 @@ const transformImage = async (inputPath, transformations = {}) => {
 const previewImageBuffer = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
-  image = applyResize(image, transformations.resize);
   image = await applyCrop(image, transformations.crop);
+  image = applyResize(image, transformations.resize);
   image = applyRotate(image, transformations.rotate);
   image = applyFlip(image, transformations.flip);
   image = applyMirror(image, transformations.mirror);
