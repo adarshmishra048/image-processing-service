@@ -30,7 +30,7 @@ const applyResize = (image, resize) => {
 // ------------------------------
 // Crop
 // ------------------------------
-const applyCrop = (image, crop) => {
+const applyCrop = async (image, crop) => {
   if (!crop) return image;
 
   const left = Number(crop.x);
@@ -40,6 +40,22 @@ const applyCrop = (image, crop) => {
 
   if (![left, top, width, height].every(Number.isFinite)) {
     throw new ApiError(400, "Invalid crop parameters.");
+  }
+
+  const metadata = await image.metadata();
+
+  if (
+    left < 0 ||
+    top < 0 ||
+    width <= 0 ||
+    height <= 0 ||
+    left + width > metadata.width ||
+    top + height > metadata.height
+  ) {
+    throw new ApiError(
+      400,
+      "Invalid crop parameters: Crop area is out of image bounds.",
+    );
   }
 
   return image.extract({
@@ -199,8 +215,8 @@ const transformImage = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
   // Apply transformations
+  image = await applyCrop(image, transformations.crop);
   image = applyResize(image, transformations.resize);
-  image = applyCrop(image, transformations.crop);
   image = applyRotate(image, transformations.rotate);
   image = applyFlip(image, transformations.flip);
   image = applyMirror(image, transformations.mirror);
@@ -234,12 +250,10 @@ const transformImage = async (inputPath, transformations = {}) => {
   const metadata = await sharp(outputPath).metadata();
   const stats = await fs.stat(outputPath);
 
-  const format = metadata.format === "jpeg" ? "jpeg" : metadata.format;
-
   return {
     filename,
     path: path.join("uploads", "transformed", filename),
-    mimetype: `image/${format}`,
+    mimetype: `image/${metadata.format === "jpeg" ? "jpeg" : metadata.format}`,
     size: stats.size,
     width: metadata.width,
     height: metadata.height,
@@ -253,8 +267,8 @@ const transformImage = async (inputPath, transformations = {}) => {
 const previewImageBuffer = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
+  image = await applyCrop(image, transformations.crop);
   image = applyResize(image, transformations.resize);
-  image = applyCrop(image, transformations.crop);
   image = applyRotate(image, transformations.rotate);
   image = applyFlip(image, transformations.flip);
   image = applyMirror(image, transformations.mirror);
@@ -270,11 +284,9 @@ const previewImageBuffer = async (inputPath, transformations = {}) => {
 
   const buffer = await processedImage.toBuffer();
 
-  const format = extension || "jpeg";
-
   return {
     buffer,
-    mimetype: `image/${format}`,
+    mimetype: `image/${extension || "jpeg"}`,
   };
 };
 
