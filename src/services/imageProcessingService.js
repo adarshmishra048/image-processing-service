@@ -76,6 +76,29 @@ const applyRotate = (image, angle) => {
 };
 
 // ------------------------------
+// Sequential ordered operations
+// ------------------------------
+const applyOperations = async (image, operations) => {
+  if (!Array.isArray(operations) || operations.length === 0) return image;
+
+  for (const op of operations) {
+    if (op.type === "resize") {
+      image = image.resize(op.width, op.height);
+    }
+
+    if (op.type === "crop") {
+      image = await applyCrop(image, op);
+    }
+
+    if (op.type === "rotate") {
+      image = applyRotate(image, op.angle);
+    }
+  }
+
+  return image;
+};
+
+// ------------------------------
 // Flip / Mirror
 // ------------------------------
 const applyFlip = (image, flip) => (flip ? image.flip() : image);
@@ -215,15 +238,26 @@ const transformImage = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
   // Apply transformations
-  image = await applyCrop(image, transformations.crop);
-  image = applyResize(image, transformations.resize);
-  image = applyRotate(image, transformations.rotate);
-  image = applyFlip(image, transformations.flip);
-  image = applyMirror(image, transformations.mirror);
-  image = applyGrayscale(image, transformations.grayscale);
-  image = applySepia(image, transformations.sepia);
-  image = applyBlur(image, transformations.blur);
-  image = applySharpen(image, transformations.sharpen);
+  if (Array.isArray(transformations.operations)) {
+    image = await applyOperations(image, transformations.operations);
+    image = applyFlip(image, transformations.flip);
+    image = applyMirror(image, transformations.mirror);
+    image = applyGrayscale(image, transformations.grayscale);
+    image = applySepia(image, transformations.sepia);
+    image = applyBlur(image, transformations.blur);
+    image = applySharpen(image, transformations.sharpen);
+  } else {
+    // Original fixed-order block (kept for legacy / preview requests)
+    image = await applyCrop(image, transformations.crop);
+    image = applyResize(image, transformations.resize);
+    image = applyRotate(image, transformations.rotate);
+    image = applyFlip(image, transformations.flip);
+    image = applyMirror(image, transformations.mirror);
+    image = applyGrayscale(image, transformations.grayscale);
+    image = applySepia(image, transformations.sepia);
+    image = applyBlur(image, transformations.blur);
+    image = applySharpen(image, transformations.sharpen);
+  }
 
   // Apply output format
   const { image: processedImage, extension } = applyFormat(
@@ -267,15 +301,26 @@ const transformImage = async (inputPath, transformations = {}) => {
 const previewImageBuffer = async (inputPath, transformations = {}) => {
   let image = sharp(inputPath);
 
-  image = await applyCrop(image, transformations.crop);
-  image = applyResize(image, transformations.resize);
-  image = applyRotate(image, transformations.rotate);
-  image = applyFlip(image, transformations.flip);
-  image = applyMirror(image, transformations.mirror);
-  image = applyGrayscale(image, transformations.grayscale);
-  image = applySepia(image, transformations.sepia);
-  image = applyBlur(image, transformations.blur);
-  image = applySharpen(image, transformations.sharpen);
+  if (Array.isArray(transformations.operations)) {
+    image = await applyOperations(image, transformations.operations);
+    image = applyFlip(image, transformations.flip);
+    image = applyMirror(image, transformations.mirror);
+    image = applyGrayscale(image, transformations.grayscale);
+    image = applySepia(image, transformations.sepia);
+    image = applyBlur(image, transformations.blur);
+    image = applySharpen(image, transformations.sharpen);
+  } else {
+    // Original fixed-order block (kept for legacy / preview requests)
+    image = await applyCrop(image, transformations.crop);
+    image = applyResize(image, transformations.resize);
+    image = applyRotate(image, transformations.rotate);
+    image = applyFlip(image, transformations.flip);
+    image = applyMirror(image, transformations.mirror);
+    image = applyGrayscale(image, transformations.grayscale);
+    image = applySepia(image, transformations.sepia);
+    image = applyBlur(image, transformations.blur);
+    image = applySharpen(image, transformations.sharpen);
+  }
 
   const { image: processedImage, extension } = applyFormat(
     image,
