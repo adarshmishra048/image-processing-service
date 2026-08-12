@@ -768,7 +768,7 @@ export default function DashboardPage() {
               <div
                 ref={sliderRef}
                 onPointerDown={handlePointerDown}
-                className="relative w-full min-h-[18rem] md:min-h-[28rem] aspect-video rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 select-none touch-none shadow-2xl"
+                className="relative w-full min-h-72 md:min-h-112 aspect-video rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 select-none touch-none shadow-2xl"
               >
                 <div ref={cropContainerRef} className="absolute inset-0">
                   <img
