@@ -21,15 +21,70 @@ export default function DashboardPage() {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [compareVersion, setCompareVersion] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [transform, setTransform] = useState({ ...defaultTransform });
+  const [operations, setOperations] = useState([]);
+  const [history, setHistory] = useState([
+    { transform: defaultTransform, operations: [] },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const sliderRef = useRef(null);
   const isDraggingRef = useRef(false);
+  const cropContainerRef = useRef(null);
+  const cropDragRef = useRef(null);
+  const originalImageRef = useRef(null);
+  const [cropMode, setCropMode] = useState(false);
+  const [cropBox, setCropBox] = useState({
+    x: 80,
+    y: 60,
+    width: 240,
+    height: 240,
+  });
 
-  const [transform, setTransform] = useState({ ...defaultTransform });
+  const pushHistory = (next, ops) => {
+    const current = history[historyIndex];
+    const snapshot = { transform: next, operations: ops || [] };
+    if (JSON.stringify(current) === JSON.stringify(snapshot)) return;
+    const updated = history.slice(0, historyIndex + 1);
+    updated.push(snapshot);
+    setHistory(updated);
+    setHistoryIndex(updated.length - 1);
+  };
+
+  const addOperation = (op) => {
+    setOperations((prev) => [...prev, op]);
+  };
+  const removeOperation = (index) => {
+    setOperations((prev) => prev.filter((_, i) => i !== index));
+  };
+  const clearOperations = () => {
+    setOperations([]);
+  };
+
+  const undo = () => {
+    if (historyIndex <= 0) return;
+    const idx = historyIndex - 1;
+    setHistoryIndex(idx);
+    const entry = history[idx];
+    if (entry) {
+      setTransform(entry.transform);
+      setOperations(entry.operations || []);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex >= history.length - 1) return;
+    const idx = historyIndex + 1;
+    setHistoryIndex(idx);
+    const entry = history[idx];
+    if (entry) {
+      setTransform(entry.transform);
+      setOperations(entry.operations || []);
+    }
+  };
 
   // Fetch grouped images
   const fetchImages = async () => {
@@ -38,6 +93,11 @@ export default function DashboardPage() {
       setGroups(res.data.groups || []);
     } catch (err) {
       console.error(err);
+      if (err.response?.status === 401) {
+        setError("Session expired. Please log in again.");
+        logout();
+        return;
+      }
       setError("Failed to load images");
     }
   };
@@ -62,55 +122,109 @@ export default function DashboardPage() {
   // Transformation badges
   const getTransformationBadges = (params = {}) => {
     const badges = [];
-
-    if (params.resize?.width && params.resize?.height) {
-      badges.push(`${params.resize.width}×${params.resize.height}`);
-    }
-
-    if (params.rotate) badges.push(`rotate ${params.rotate}°`);
-    if (params.grayscale) badges.push("grayscale");
-    if (params.sepia) badges.push("sepia");
-    if (params.blur) badges.push(`blur ${params.blur}`);
-    if (params.format) badges.push(params.format);
-
+    const ops = params.operations || [];
+    ops.forEach((op) => {
+      if (op.type === "crop") {
+        badges.push(`crop ${op.width}×${op.height}`);
+      }
+      if (op.type === "resize") {
+        badges.push(`${op.width}×${op.height}`);
+      }
+      if (op.type === "rotate") {
+        badges.push(`rotate ${op.angle}°`);
+      }
+      if (op.type === "grayscale") {
+        badges.push("grayscale");
+      }
+      if (op.type === "sepia") {
+        badges.push("sepia");
+      }
+      if (op.type === "blur") {
+        badges.push(`blur ${op.value}`);
+      }
+      if (op.type === "format") {
+        badges.push(op.value);
+      }
+    });
     return badges;
+  };
+
+  const makeHolePolygon = (box) => {
+    const l = Math.max(0, box.x);
+    const t = Math.max(0, box.y);
+    const r = Math.max(0, l + box.width);
+    const b = Math.max(0, t + box.height);
+    return `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${l}px ${b}px, ${r}px ${b}px, ${r}px ${t}px, ${l}px ${t}px)`;
+  };
+
+  const getCropInImagePixels = () => {
+    const container = cropContainerRef.current;
+    const img = originalImageRef.current;
+    if (!container || !img || !selectedImage) return null;
+
+    const containerRect = container.getBoundingClientRect();
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return null;
+
+    const scale = Math.min(containerRect.width / nw, containerRect.height / nh);
+    const contentLeft = (containerRect.width - nw * scale) / 2;
+    const contentTop = (containerRect.height - nh * scale) / 2;
+
+    let x = (cropBox.x - contentLeft) / scale;
+    let y = (cropBox.y - contentTop) / scale;
+
+    x = Math.max(0, Math.min(x, nw - 1));
+    y = Math.max(0, Math.min(y, nh - 1));
+
+    const rx = Math.round(x);
+    const ry = Math.round(y);
+
+    return {
+      x: rx,
+      y: ry,
+      width: Math.max(1, Math.round(Math.min(cropBox.width / scale, nw - rx))),
+      height: Math.max(
+        1,
+        Math.round(Math.min(cropBox.height / scale, nh - ry)),
+      ),
+    };
   };
 
   // Live preview
   useEffect(() => {
     if (!selectedImage) return;
-
     const controller = new AbortController();
+
     const params = new URLSearchParams();
-
-    params.set("width", transform.width);
-    params.set("height", transform.height);
-    params.set("rotate", transform.rotate);
-
-    if (transform.grayscale) params.set("grayscale", "true");
-    if (transform.sepia) params.set("sepia", "true");
-    if (transform.blur !== "") params.set("blur", transform.blur);
-    if (transform.format) params.set("format", transform.format);
-
+    const previewOperations = cropMode
+      ? operations.filter((op) => op.type !== "rotate" && op.type !== "resize")
+      : operations;
+    params.set("operations", JSON.stringify(previewOperations));
     const loadPreview = async () => {
       try {
         const token = localStorage.getItem("token");
-
         const res = await fetch(
           `${API_BASE}/api/images/${selectedImage._id}/preview?${params.toString()}`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           },
         );
-
-        if (!res.ok) return;
-
+        if (!res.ok) {
+          const message = await res.text().catch(() => "");
+          setError(
+            message ||
+              `Preview failed (${res.status}). Check operation values.`,
+          );
+          setPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+          });
+          return;
+        }
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
-
         setPreviewUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return objectUrl;
@@ -121,11 +235,12 @@ export default function DashboardPage() {
         }
       }
     };
-
-    loadPreview();
-
-    return () => controller.abort();
-  }, [transform, selectedImage]);
+    const timer = setTimeout(loadPreview, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [operations, transform, selectedImage, cropMode]);
 
   // Upload
   const handleUpload = async (e) => {
@@ -210,6 +325,8 @@ export default function DashboardPage() {
 
     setPreviewUrl(null);
     setTransform({ ...defaultTransform });
+    setHistory([{ ...defaultTransform }]);
+    setHistoryIndex(0);
     setError("");
   };
 
@@ -221,6 +338,8 @@ export default function DashboardPage() {
 
     setPreviewUrl(null);
     setTransform({ ...defaultTransform });
+    setCropMode(false);
+    setCropBox({ x: 80, y: 60, width: 240, height: 240 });
   };
 
   const updateSlider = (clientX) => {
@@ -247,6 +366,174 @@ export default function DashboardPage() {
     isDraggingRef.current = false;
   };
 
+  // ---- Crop dragging ----
+  const getImageBounds = () => {
+    const container = cropContainerRef.current;
+    const img = container?.querySelector("img");
+    if (!container || !img) return null;
+
+    const containerRect = container.getBoundingClientRect();
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return null;
+
+    const scale = Math.min(containerRect.width / nw, containerRect.height / nh);
+    const contentW = nw * scale;
+    const contentH = nh * scale;
+
+    return {
+      left: (containerRect.width - contentW) / 2,
+      top: (containerRect.height - contentH) / 2,
+      right: (containerRect.width + contentW) / 2,
+      bottom: (containerRect.height + contentH) / 2,
+    };
+  };
+
+  const getInitialCropBox = () => {
+    const bounds = getImageBounds();
+    if (!bounds) return { x: 80, y: 60, width: 240, height: 240 };
+
+    const w = bounds.right - bounds.left;
+    const h = bounds.bottom - bounds.top;
+    const boxW = Math.min(240, w);
+    const boxH = Math.min(240, h);
+
+    return {
+      x: bounds.left + (w - boxW) / 2,
+      y: bounds.top + (h - boxH) / 2,
+      width: boxW,
+      height: boxH,
+    };
+  };
+
+  const startCropDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = cropContainerRef.current?.getBoundingClientRect();
+
+    if (!rect) return;
+    cropDragRef.current = {
+      type: "move",
+      startX: e.clientX,
+      startY: e.clientY,
+      initial: { ...cropBox },
+      rect,
+    };
+
+    window.addEventListener("pointermove", onCropMove);
+    window.addEventListener("pointerup", stopCropDrag);
+  };
+
+  const startCropResize = (handle) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = cropContainerRef.current?.getBoundingClientRect();
+
+    if (!rect) return;
+    cropDragRef.current = {
+      type: handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      initial: { ...cropBox },
+      rect,
+    };
+
+    window.addEventListener("pointermove", onCropMove);
+    window.addEventListener("pointerup", stopCropDrag);
+  };
+
+  const onCropMove = (e) => {
+    const drag = cropDragRef.current;
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    const next = { ...drag.initial };
+    const bounds = getImageBounds();
+    if (!bounds) return;
+
+    if (drag.type === "move") {
+      next.x = Math.max(
+        bounds.left,
+        Math.min(bounds.right - next.width, drag.initial.x + dx),
+      );
+      next.y = Math.max(
+        bounds.top,
+        Math.min(bounds.bottom - next.height, drag.initial.y + dy),
+      );
+    }
+
+    if (drag.type === "se") {
+      next.width = Math.min(
+        bounds.right - next.x,
+        Math.max(40, drag.initial.width + dx),
+      );
+      next.height = Math.min(
+        bounds.bottom - next.y,
+        Math.max(40, drag.initial.height + dy),
+      );
+    }
+
+    if (drag.type === "sw") {
+      next.x = Math.max(
+        bounds.left,
+        Math.min(drag.initial.x + dx, drag.initial.x + drag.initial.width - 40),
+      );
+      next.width = drag.initial.width - (next.x - drag.initial.x);
+      next.height = Math.min(
+        bounds.bottom - next.y,
+        Math.max(40, drag.initial.height + dy),
+      );
+    }
+
+    if (drag.type === "ne") {
+      next.y = Math.max(
+        bounds.top,
+        Math.min(
+          drag.initial.y + dy,
+          drag.initial.y + drag.initial.height - 40,
+        ),
+      );
+      next.height = drag.initial.height - (next.y - drag.initial.y);
+      next.width = Math.min(
+        bounds.right - next.x,
+        Math.max(40, drag.initial.width + dx),
+      );
+    }
+
+    if (drag.type === "nw") {
+      next.x = Math.max(
+        bounds.left,
+        Math.min(drag.initial.x + dx, drag.initial.x + drag.initial.width - 40),
+      );
+      next.y = Math.max(
+        bounds.top,
+        Math.min(
+          drag.initial.y + dy,
+          drag.initial.y + drag.initial.height - 40,
+        ),
+      );
+      next.width = drag.initial.width - (next.x - drag.initial.x);
+      next.height = drag.initial.height - (next.y - drag.initial.y);
+    }
+
+    if (bounds) {
+      next.x = Math.max(bounds.left, next.x);
+      next.y = Math.max(bounds.top, next.y);
+      next.width = Math.max(40, Math.min(bounds.right - next.x, next.width));
+      next.height = Math.max(40, Math.min(bounds.bottom - next.y, next.height));
+    }
+
+    setCropBox(next);
+  };
+
+  const stopCropDrag = () => {
+    cropDragRef.current = null;
+    window.removeEventListener("pointermove", onCropMove);
+    window.removeEventListener("pointerup", stopCropDrag);
+  };
+
   useEffect(() => {
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
@@ -257,49 +544,45 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (cropMode) setCropBox(getInitialCropBox());
+  }, [cropMode]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (cropMode) setError("");
+  }, [cropBox, cropMode]);
+
   // Apply transform
   const handleTransform = async (e) => {
     e.preventDefault();
-
     if (!selectedImage) return;
-
     setLoading(true);
     setError("");
-
     try {
-      const payload = {
-        resize: {
-          width: Number(transform.width),
-          height: Number(transform.height),
-        },
-        rotate: Number(transform.rotate),
-        grayscale: transform.grayscale,
-        sepia: transform.sepia,
-        format: transform.format,
-      };
-
-      const blurValue = Number(transform.blur);
-
-      if (transform.blur !== "" && blurValue >= 0.3) {
-        payload.blur = blurValue;
-      }
-
+      const payload = { operations };
+      console.log("Transform payload", payload);
       await api.post(`/images/${selectedImage._id}/transform`, payload);
-
       closeTransformPanel();
+      clearOperations();
       await fetchImages();
     } catch (err) {
       console.error(err);
-
       setError(
-        err.response?.data?.errors?.[0] ||
-          err.response?.data?.message ||
+        err.response?.data?.message ||
+          err.response?.data?.errors?.[0] ||
+          err.message ||
           "Transformation failed",
       );
     } finally {
       setLoading(false);
     }
   };
+
+  const cropSource = selectedImage
+    ? `${API_BASE}/${selectedImage.path.replace(/^\//, "")}`
+    : "";
 
   return (
     <div className="min-h-screen bg-slate-950 p-6">
@@ -377,6 +660,99 @@ export default function DashboardPage() {
                 ✕
               </button>
             </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setCropMode((v) => !v)}
+                className={`px-4 py-2 rounded-lg border transition-colors ${
+                  cropMode
+                    ? "bg-indigo-600 border-indigo-500 text-white"
+                    : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                }`}
+              >
+                {cropMode ? "Exit Crop" : "Crop"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCropBox(getInitialCropBox())}
+                className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700"
+              >
+                Reset Crop
+              </button>
+
+              {cropMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const crop = getCropInImagePixels();
+                    if (crop) {
+                      setOperations((prev) => [
+                        { type: "crop", ...crop },
+                        ...prev.filter((op) => op.type !== "crop"),
+                      ]);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
+                >
+                  Add Crop
+                </button>
+              )}
+            </div>
+
+            {operations.length > 0 && (
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-medium">Operation Order</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearOperations();
+                      setTransform({ ...defaultTransform });
+                    }}
+                    className="text-sm text-red-400 hover:text-red-300"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {operations.map((op, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-lg px-3 py-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center">
+                          {index + 1}
+                        </span>
+
+                        <span className="text-slate-200">
+                          {op.type === "resize" &&
+                            `Resize ${op.width}×${op.height}`}{" "}
+                          {op.type === "crop" &&
+                            `Crop ${op.width}×${op.height}`}{" "}
+                          {op.type === "rotate" && `Rotate ${op.angle}°`}{" "}
+                          {op.type === "format" &&
+                            `Format ${op.value.toUpperCase()}`}{" "}
+                          {op.type === "grayscale" && "Grayscale"}{" "}
+                          {op.type === "sepia" && "Sepia"}{" "}
+                          {op.type === "blur" && `Blur ${op.value}`}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeOperation(index)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Professional draggable compare slider */}
             <div className="space-y-4">
@@ -392,71 +768,120 @@ export default function DashboardPage() {
               <div
                 ref={sliderRef}
                 onPointerDown={handlePointerDown}
-                className="relative w-full h-72 md:h-[28rem] rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 cursor-ew-resize select-none touch-none shadow-2xl"
+                className="relative w-full min-h-[18rem] md:min-h-[28rem] aspect-video rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 select-none touch-none shadow-2xl"
               >
-                {/* Original image */}
-                <img
-                  src={`${API_BASE}/${selectedImage.path.replace(/^\//, "")}`}
-                  alt="Original"
-                  className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
-                  draggable={false}
-                />
-
-                {/* Preview image */}
-                <div
-                  className="absolute inset-0 overflow-hidden pointer-events-none"
-                  style={{
-                    clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`,
-                  }}
-                >
+                <div ref={cropContainerRef} className="absolute inset-0">
                   <img
-                    src={
-                      previewUrl ||
-                      `${API_BASE}/${selectedImage.path.replace(/^\//, "")}`
-                    }
-                    alt="Preview"
-                    className="absolute inset-0 w-full h-full object-contain bg-slate-900"
+                    ref={originalImageRef}
+                    src={cropSource}
+                    alt="Original"
+                    className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
                     draggable={false}
                   />
+
+                  <div
+                    className="absolute inset-0 overflow-hidden pointer-events-none"
+                    style={{
+                      clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`,
+                    }}
+                  >
+                    <img
+                      src={
+                        previewUrl ||
+                        `${API_BASE}/${selectedImage.path.replace(/^\//, "")}`
+                      }
+                      alt="Preview"
+                      className="absolute inset-0 w-full h-full object-contain bg-slate-900"
+                      draggable={false}
+                    />
+                  </div>
+
+                  {cropMode && (
+                    <>
+                      <img
+                        src={cropMode ? cropSource : previewUrl || cropSource}
+                        alt=""
+                        draggable={false}
+                        className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
+                        style={{
+                          clipPath: makeHolePolygon(cropBox),
+                          filter: "blur(8px) brightness(0.6)",
+                        }}
+                      />
+
+                      <div className="absolute inset-0 bg-black/45" />
+
+                      <img
+                        src={cropSource}
+                        alt="Focused preview"
+                        draggable={false}
+                        className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
+                        style={{
+                          clipPath: `polygon(${Math.max(0, cropBox.x)}px ${Math.max(0, cropBox.y)}px, ${Math.max(0, cropBox.x + cropBox.width)}px ${Math.max(0, cropBox.y)}px, ${Math.max(0, cropBox.x + cropBox.width)}px ${Math.max(0, cropBox.y + cropBox.height)}px, ${Math.max(0, cropBox.x)}px ${Math.max(0, cropBox.y + cropBox.height)}px)`,
+                        }}
+                      />
+
+                      <div
+                        className="absolute border-2 border-indigo-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] rounded-md cursor-move"
+                        style={{
+                          left: cropBox.x,
+                          top: cropBox.y,
+                          width: cropBox.width,
+                          height: cropBox.height,
+                        }}
+                        onPointerDown={startCropDrag}
+                      >
+                        <div className="absolute inset-0 border border-white/20" />
+
+                        {[
+                          [
+                            "nw",
+                            "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize",
+                          ],
+                          [
+                            "ne",
+                            "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize",
+                          ],
+                          [
+                            "sw",
+                            "left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize",
+                          ],
+                          [
+                            "se",
+                            "right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize",
+                          ],
+                        ].map(([handle, cls]) => (
+                          <button
+                            key={handle}
+                            type="button"
+                            onPointerDown={startCropResize(handle)}
+                            className={`absolute w-4 h-4 rounded-full bg-white border-2 border-indigo-500 shadow ${cls}`}
+                          />
+                        ))}
+
+                        <div className="absolute top-2 left-2 bg-black/60 text-white text-[11px] px-2 py-1 rounded">
+                          {(() => {
+                            const c = getCropInImagePixels();
+                            return c ? `${c.width} × ${c.height}` : "";
+                          })()}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Divider */}
                 <div
                   className="absolute top-0 bottom-0 w-0.5 bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)] pointer-events-none"
                   style={{ left: `${sliderPosition}%` }}
                 />
 
-                {/* Handle */}
                 <div
                   className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                   style={{ left: `${sliderPosition}%` }}
                 >
                   <div className="w-12 h-12 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-2xl border border-white/80 ring-4 ring-white/10">
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M15 18l-6-6 6-6" />
-                      <path d="M9 18l-6-6 6-6" />
-                      <path d="M9 6l6 6-6 6" />
-                      <path d="M15 6l6 6-6 6" />
-                    </svg>
+                    ↔
                   </div>
-                </div>
-
-                {/* Edge labels */}
-                <div className="absolute top-4 left-4 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs text-white border border-white/10">
-                  Before
-                </div>
-
-                <div className="absolute top-4 right-4 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs text-white border border-white/10">
-                  After
                 </div>
               </div>
 
@@ -465,7 +890,6 @@ export default function DashboardPage() {
                 <span>{Math.round(sliderPosition)}% revealed</span>
               </div>
             </div>
-
             {/* Controls */}
             <div className="grid md:grid-cols-2 gap-4">
               <div>
@@ -475,12 +899,14 @@ export default function DashboardPage() {
                 <input
                   type="number"
                   value={transform.width}
-                  onChange={(e) =>
-                    setTransform({
+                  onChange={(e) => {
+                    const next = {
                       ...transform,
                       width: Number(e.target.value),
-                    })
-                  }
+                    };
+                    setTransform(next);
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
@@ -492,15 +918,31 @@ export default function DashboardPage() {
                 <input
                   type="number"
                   value={transform.height}
-                  onChange={(e) =>
-                    setTransform({
+                  onChange={(e) => {
+                    const next = {
                       ...transform,
                       height: Number(e.target.value),
-                    })
-                  }
+                    };
+                    setTransform(next);
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  addOperation({
+                    type: "resize",
+                    width: Number(transform.width),
+                    height: Number(transform.height),
+                  })
+                }
+                className="md:col-span-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-4 py-2 rounded-lg"
+              >
+                Add Resize
+              </button>
 
               <div>
                 <label className="block text-sm text-slate-300 mb-2">
@@ -509,12 +951,19 @@ export default function DashboardPage() {
                 <input
                   type="number"
                   value={transform.rotate}
-                  onChange={(e) =>
-                    setTransform({
-                      ...transform,
-                      rotate: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => {
+                    const angle = Number(e.target.value);
+                    setTransform((prev) => ({ ...prev, rotate: angle }));
+                    setOperations((prev) => {
+                      const withoutRotate = prev.filter(
+                        (op) => op.type !== "rotate",
+                      );
+                      return angle !== 0
+                        ? [...withoutRotate, { type: "rotate", angle }]
+                        : withoutRotate;
+                    });
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
@@ -527,23 +976,39 @@ export default function DashboardPage() {
                   type="number"
                   step="0.1"
                   value={transform.blur}
-                  onChange={(e) =>
-                    setTransform({ ...transform, blur: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const value =
+                      e.target.value === "" ? "" : Number(e.target.value);
+                    setTransform((prev) => ({ ...prev, blur: value }));
+                    setOperations((prev) => {
+                      const without = prev.filter((op) => op.type !== "blur");
+                      return value === ""
+                        ? without
+                        : [...without, { type: "blur", value }];
+                    });
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
                 />
               </div>
             </div>
-
             <div>
               <label className="block text-sm text-slate-300 mb-2">
                 Format
               </label>
               <select
                 value={transform.format}
-                onChange={(e) =>
-                  setTransform({ ...transform, format: e.target.value })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  setTransform((prev) => ({ ...prev, format: value }));
+
+                  setOperations((prev) => {
+                    const without = prev.filter((op) => op.type !== "format");
+                    return [...without, { type: "format", value }];
+                  });
+                }}
+                onBlur={() => pushHistory(transform, operations)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
               >
                 <option value="jpeg">JPEG</option>
@@ -551,15 +1016,24 @@ export default function DashboardPage() {
                 <option value="webp">WebP</option>
               </select>
             </div>
-
             <div className="flex gap-6 flex-wrap">
               <label className="flex items-center gap-2 text-slate-300">
                 <input
                   type="checkbox"
                   checked={transform.grayscale}
-                  onChange={(e) =>
-                    setTransform({ ...transform, grayscale: e.target.checked })
-                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setTransform({ ...transform, grayscale: checked });
+                    setOperations((prev) => {
+                      const without = prev.filter(
+                        (op) => op.type !== "grayscale",
+                      );
+                      return checked
+                        ? [...without, { type: "grayscale" }]
+                        : without;
+                    });
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                 />
                 Grayscale
               </label>
@@ -568,21 +1042,49 @@ export default function DashboardPage() {
                 <input
                   type="checkbox"
                   checked={transform.sepia}
-                  onChange={(e) =>
-                    setTransform({ ...transform, sepia: e.target.checked })
-                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setTransform({ ...transform, sepia: checked });
+                    setOperations((prev) => {
+                      const without = prev.filter((op) => op.type !== "sepia");
+                      return checked
+                        ? [...without, { type: "sepia" }]
+                        : without;
+                    });
+                  }}
+                  onBlur={() => pushHistory(transform, operations)}
                 />
                 Sepia
               </label>
             </div>
-
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setTransform({ ...defaultTransform })}
+                onClick={() => {
+                  const next = { ...defaultTransform };
+                  setTransform(next);
+                  clearOperations();
+                  pushHistory(next, []);
+                }}
                 className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-5 py-3 rounded-lg font-medium transition-colors"
               >
                 Reset
+              </button>
+
+              <button
+                type="button"
+                onClick={undo}
+                className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700"
+              >
+                Undo
+              </button>
+
+              <button
+                type="button"
+                onClick={redo}
+                className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white hover:bg-slate-700"
+              >
+                Redo
               </button>
 
               <button
