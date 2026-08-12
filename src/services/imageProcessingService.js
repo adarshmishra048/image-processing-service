@@ -81,17 +81,105 @@ const applyRotate = (image, angle) => {
 const applyOperations = async (image, operations) => {
   if (!Array.isArray(operations) || operations.length === 0) return image;
 
+  let currentWidth = null;
+  let currentHeight = null;
+
+  const originalMeta = await image.metadata();
+  currentWidth = originalMeta.width;
+  currentHeight = originalMeta.height;
+
   for (const op of operations) {
     if (op.type === "resize") {
-      image = image.resize(op.width, op.height);
+      const requestedWidth = Number(op.width);
+      const requestedHeight = Number(op.height);
+      const width = requestedWidth > 0 ? Math.round(requestedWidth) : null;
+      const height = requestedHeight > 0 ? Math.round(requestedHeight) : null;
+
+      image = image.resize({ width, height });
+
+      if (width && height) {
+        currentWidth = width;
+        currentHeight = height;
+      } else if (width && currentWidth) {
+        const newHeight = Math.max(
+          1,
+          Math.round((width * currentHeight) / currentWidth),
+        );
+        currentWidth = width;
+        currentHeight = newHeight;
+      } else if (height && currentHeight) {
+        const newWidth = Math.max(
+          1,
+          Math.round((height * currentWidth) / currentHeight),
+        );
+        currentHeight = height;
+        currentWidth = newWidth;
+      }
     }
 
     if (op.type === "crop") {
-      image = await applyCrop(image, op);
+      const left = Math.round(Number(op.x));
+      const top = Math.round(Number(op.y));
+      const width = Math.round(Number(op.width));
+      const height = Math.round(Number(op.height));
+
+      if (![left, top, width, height].every(Number.isFinite)) {
+        throw new ApiError(400, "Invalid crop parameters.");
+      }
+
+      if (
+        left < 0 ||
+        top < 0 ||
+        width <= 0 ||
+        height <= 0 ||
+        left + width > currentWidth ||
+        top + height > currentHeight
+      ) {
+        throw new ApiError(
+          400,
+          "Invalid crop parameters: Crop area is out of image bounds.",
+        );
+      }
+
+      image = image.extract({
+        left,
+        top,
+        width,
+        height,
+      });
+
+      currentWidth = width;
+      currentHeight = height;
     }
 
     if (op.type === "rotate") {
       image = applyRotate(image, op.angle);
+
+      const angle = ((Number(op.angle) % 360) + 360) % 360;
+
+      if (angle === 90 || angle === 270) {
+        [currentWidth, currentHeight] = [currentHeight, currentWidth];
+      }
+    }
+
+    if (op.type === "grayscale") {
+      image = image.grayscale();
+    }
+
+    if (op.type === "sepia") {
+      image = image.recomb([
+        [0.393, 0.769, 0.189],
+        [0.349, 0.686, 0.168],
+        [0.272, 0.534, 0.131],
+      ]);
+    }
+
+    if (op.type === "blur") {
+      image = image.blur(Number(op.value) || undefined);
+    }
+
+    if (op.type === "format") {
+      // handled later by applyFormat()
     }
   }
 
@@ -222,6 +310,11 @@ const buildFilename = (inputPath, hash, extension) => {
   return `${baseName}-${hash}.${finalExt}`;
 };
 
+const getFormatFromOperations = (operations = []) => {
+  const formatOp = operations.find((op) => op.type === "format");
+  return formatOp?.value || null;
+};
+
 // ------------------------------
 // Main transform function
 // ------------------------------
@@ -262,7 +355,8 @@ const transformImage = async (inputPath, transformations = {}) => {
   // Apply output format
   const { image: processedImage, extension } = applyFormat(
     image,
-    transformations.format,
+    getFormatFromOperations(transformations.operations) ||
+      transformations.format,
   );
 
   // Generate deterministic filename
@@ -324,7 +418,8 @@ const previewImageBuffer = async (inputPath, transformations = {}) => {
 
   const { image: processedImage, extension } = applyFormat(
     image,
-    transformations.format,
+    getFormatFromOperations(transformations.operations) ||
+      transformations.format,
   );
 
   const buffer = await processedImage.toBuffer();

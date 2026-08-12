@@ -191,42 +191,11 @@ const previewImage = asyncHandler(async (req, res) => {
 
   const transformations = {};
 
-  if (req.query.width || req.query.height) {
-    transformations.resize = {
-      width: req.query.width ? Number(req.query.width) : undefined,
-      height: req.query.height ? Number(req.query.height) : undefined,
-    };
-  }
-
-  if (req.query.rotate) {
-    transformations.rotate = Number(req.query.rotate);
-  }
-
-  if (req.query.grayscale === "true") {
-    transformations.grayscale = true;
-  }
-
-  if (req.query.sepia === "true") {
-    transformations.sepia = true;
-  }
-
-  if (req.query.blur) {
-    const blur = Number(req.query.blur);
-
-    if (!Number.isNaN(blur) && blur >= 0.3) {
-      transformations.blur = blur;
-    }
-  }
-
-  if (req.query.format) {
-    transformations.format = req.query.format;
-  }
-
-  if (req.query.crop) {
+  if (req.query.operations) {
     try {
-      transformations.crop = JSON.parse(req.query.crop);
+      transformations.operations = JSON.parse(req.query.operations);
     } catch {
-      throw new ApiError(400, "Invalid crop parameters.");
+      throw new ApiError(400, "Invalid operations payload.");
     }
   }
 
