@@ -28,7 +28,21 @@ const operationSchema = Joi.alternatives().try(
   }),
   Joi.object({
     type: Joi.string().valid("rotate").required(),
-    angle: Joi.number().integer().min(-360).max(360).required(),
+    angle: Joi.number().min(-360).max(360).required(),
+  }),
+  Joi.object({
+    type: Joi.string().valid("blur").required(),
+    value: Joi.number().min(0).max(100).required(),
+  }),
+  Joi.object({
+    type: Joi.string().valid("format").required(),
+    value: Joi.string().valid("jpg", "jpeg", "png", "webp").required(),
+  }),
+  Joi.object({
+    type: Joi.string().valid("grayscale").required(),
+  }),
+  Joi.object({
+    type: Joi.string().valid("sepia").required(),
   }),
 );
 
