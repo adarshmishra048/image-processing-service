@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../api/client";
 import UploadDropzone from "../components/UploadDropzone";
 import PreviewSkeleton from "../components/PreviewSkeleton";
+import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
 
 const API_BASE = "https://image-processing-service-8wui.onrender.com";
 
@@ -40,6 +41,7 @@ export default function DashboardPage() {
   const cropContainerRef = useRef(null);
   const cropDragRef = useRef(null);
   const originalImageRef = useRef(null);
+  const uploadRef = useRef(null);
   const [cropMode, setCropMode] = useState(false);
   const [cropBox, setCropBox] = useState({
     x: 80,
@@ -362,6 +364,33 @@ export default function DashboardPage() {
     setCropBox({ x: 80, y: 60, width: 240, height: 240 });
   };
 
+  const applyRotate = (angle) => {
+    const value = Number.isNaN(angle) ? 0 : angle;
+    setTransform((prev) => ({ ...prev, rotate: value }));
+    setOperations((prev) => {
+      const withoutRotate = prev.filter((op) => op.type !== "rotate");
+      return value !== 0
+        ? [...withoutRotate, { type: "rotate", angle: value }]
+        : withoutRotate;
+    });
+  };
+
+  useKeyboardShortcuts({
+    onUndo: selectedImage ? undo : undefined,
+    onRedo: selectedImage ? redo : undefined,
+    onOpenPicker: () => uploadRef.current?.openFilePicker(),
+    onEscape: () => {
+      if (cropMode) {
+        setCropMode(false);
+      } else if (selectedImage) {
+        closeTransformPanel();
+      }
+    },
+    onRotate: selectedImage
+      ? () => applyRotate(((transform.rotate || 0) + 90) % 360)
+      : undefined,
+  });
+
   const updateSlider = (clientX) => {
     const rect = sliderRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -626,6 +655,7 @@ export default function DashboardPage() {
 
         {/* Upload */}
         <UploadDropzone
+          ref={uploadRef}
           file={file}
           onFileSelect={autoUpload}
           loading={loading}
@@ -957,18 +987,7 @@ export default function DashboardPage() {
                 <input
                   type="number"
                   value={transform.rotate}
-                  onChange={(e) => {
-                    const angle = Number(e.target.value);
-                    setTransform((prev) => ({ ...prev, rotate: angle }));
-                    setOperations((prev) => {
-                      const withoutRotate = prev.filter(
-                        (op) => op.type !== "rotate",
-                      );
-                      return angle !== 0
-                        ? [...withoutRotate, { type: "rotate", angle }]
-                        : withoutRotate;
-                    });
-                  }}
+                  onChange={(e) => applyRotate(Number(e.target.value))}
                   onBlur={() => pushHistory(transform, operations)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
                 />

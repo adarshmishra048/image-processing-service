@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState } from "react";
 
 export default function UploadDropzone({
   file,
@@ -6,6 +6,7 @@ export default function UploadDropzone({
   loading,
   progress,
   onSubmit,
+  ref
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -14,6 +15,10 @@ export default function UploadDropzone({
     if (loading) return;
     fileInputRef.current?.click();
   };
+
+  useImperativeHandle(ref, () => ({
+    openFilePicker,
+  }));
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -92,6 +97,18 @@ export default function UploadDropzone({
             <p className="text-slate-400 text-sm mt-1">
               Click anywhere to browse files
             </p>
+
+            <p className="text-slate-500 text-xs mt-2">
+              Press{" "}
+              <kbd className="px-1 py-0.5 rounded bg-slate-800 border border-slate-700">
+                {/mac/i.test(
+                  navigator.userAgentData?.platform || navigator.platform || "",
+                )
+                  ? "⌘ O"
+                  : "Ctrl O"}
+              </kbd>{" "}
+              to open files
+            </p>
           </div>
         </div>
       </div>
@@ -99,7 +116,8 @@ export default function UploadDropzone({
       {file && (
         <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 flex items-center justify-between">
           <p className="text-sm text-slate-300 truncate">
-            Selected: <span className="font-medium text-white">{file.name}</span>
+            Selected:{" "}
+            <span className="font-medium text-white">{file.name}</span>
           </p>
 
           <button
