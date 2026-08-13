@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/client";
 import UploadDropzone from "../components/UploadDropzone";
+import PreviewSkeleton from "../components/PreviewSkeleton";
 
 const API_BASE = "https://image-processing-service-8wui.onrender.com";
 
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const [compareVersion, setCompareVersion] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [transform, setTransform] = useState({ ...defaultTransform });
   const [operations, setOperations] = useState([]);
@@ -205,6 +207,8 @@ export default function DashboardPage() {
     params.set("operations", JSON.stringify(previewOperations));
     const loadPreview = async () => {
       try {
+        setPreviewLoading(true);
+
         const token = localStorage.getItem("token");
         const res = await fetch(
           `${API_BASE}/api/images/${selectedImage._id}/preview?${params.toString()}`,
@@ -223,6 +227,7 @@ export default function DashboardPage() {
             if (prev) URL.revokeObjectURL(prev);
             return null;
           });
+          setPreviewLoading(false);
           return;
         }
         const blob = await res.blob();
@@ -231,9 +236,11 @@ export default function DashboardPage() {
           if (prev) URL.revokeObjectURL(prev);
           return objectUrl;
         });
+        setPreviewLoading(false);
       } catch (err) {
         if (err.name !== "AbortError") {
           console.error(err);
+          setPreviewLoading(false);
         }
       }
     };
@@ -345,6 +352,7 @@ export default function DashboardPage() {
   // Close transform panel
   const closeTransformPanel = () => {
     setSelectedImage(null);
+    setPreviewLoading(false);
 
     if (previewUrl) URL.revokeObjectURL(previewUrl);
 
@@ -760,6 +768,14 @@ export default function DashboardPage() {
                 onPointerDown={handlePointerDown}
                 className="relative w-full min-h-72 md:min-h-112 aspect-video rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 select-none touch-none shadow-2xl"
               >
+                {previewLoading && <PreviewSkeleton />}
+
+                {previewLoading && (
+                  <div className="absolute left-0 right-0 bottom-0 z-20 h-1 bg-slate-800">
+                    <div className="h-full w-1/3 bg-indigo-500 animate-[loading_1s_ease-in-out_infinite]" />
+                  </div>
+                )}
+
                 <div ref={cropContainerRef} className="absolute inset-0">
                   <img
                     ref={originalImageRef}
@@ -781,7 +797,7 @@ export default function DashboardPage() {
                         `${API_BASE}/${selectedImage.path.replace(/^\//, "")}`
                       }
                       alt="Preview"
-                      className="absolute inset-0 w-full h-full object-contain bg-slate-900"
+                      className={`absolute inset-0 w-full h-full object-contain bg-slate-900 transition-opacity duration-200`}
                       draggable={false}
                     />
                   </div>

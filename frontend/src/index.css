@@ -11,3 +11,12 @@ body {
   color: #e5e7eb;
   font-family: Inter, system-ui, sans-serif;
 }
+
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
