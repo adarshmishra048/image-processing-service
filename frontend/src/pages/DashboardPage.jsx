@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/client";
+import UploadDropzone from "../components/UploadDropzone";
 
 const API_BASE = "https://image-processing-service-8wui.onrender.com";
 
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   const [groups, setGroups] = useState([]);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [compareVersion, setCompareVersion] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -243,21 +245,26 @@ export default function DashboardPage() {
   }, [operations, transform, selectedImage, cropMode]);
 
   // Upload
-  const handleUpload = async (e) => {
+  const handleUpload = async (e, uploadFile) => {
     e.preventDefault();
 
-    if (!file) return;
+    const selectedFile = uploadFile || file;
+    if (!selectedFile) return;
 
     setLoading(true);
     setError("");
+    setProgress(0);
 
     try {
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", selectedFile);
 
       await api.post("/images", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (e) => {
+          if (e.total) setProgress(Math.round((e.loaded / e.total) * 100));
         },
       });
 
@@ -269,6 +276,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const autoUpload = (selected) => {
+    setFile(selected);
+    if (selected) void handleUpload({ preventDefault: () => {} }, selected);
   };
 
   // Delete
@@ -605,35 +617,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Upload */}
-        <form
+        <UploadDropzone
+          file={file}
+          onFileSelect={autoUpload}
+          loading={loading}
+          progress={progress}
           onSubmit={handleUpload}
-          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4"
-        >
-          <div>
-            <label className="block text-sm text-slate-300 mb-2">
-              Choose an image
-            </label>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files[0])}
-              className="block w-full text-slate-300 file:bg-slate-800 file:border file:border-slate-700 file:text-white file:px-4 file:py-2 file:rounded-lg file:mr-4 hover:file:bg-slate-700"
-            />
-          </div>
-
-          {file && (
-            <p className="text-sm text-slate-400">Selected: {file.name}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !file}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-5 py-3 rounded-lg font-medium transition-colors"
-          >
-            {loading ? "Uploading..." : "Upload Image"}
-          </button>
-        </form>
+        />
 
         {/* Error */}
         {error && (
