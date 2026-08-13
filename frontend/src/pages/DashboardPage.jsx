@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../api/client";
 import UploadDropzone from "../components/UploadDropzone";
 import PreviewSkeleton from "../components/PreviewSkeleton";
+import AspectRatioSelector, { RATIOS } from "../components/AspectRatioSelector";
 import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
 
 const API_BASE = "https://image-processing-service-8wui.onrender.com";
@@ -43,6 +44,8 @@ export default function DashboardPage() {
   const originalImageRef = useRef(null);
   const uploadRef = useRef(null);
   const [cropMode, setCropMode] = useState(false);
+  const [cropRatio, setCropRatio] = useState(null);
+  const activeRatioLabel = RATIOS.find((r) => r.value === cropRatio)?.label;
   const [cropBox, setCropBox] = useState({
     x: 80,
     y: 60,
@@ -375,6 +378,32 @@ export default function DashboardPage() {
     });
   };
 
+  const handleRatioChange = (ratio) => {
+    setCropRatio(ratio);
+    if (!cropMode || !ratio) return;
+
+    const bounds = getImageBounds();
+    if (!bounds) return;
+
+    const w = bounds.right - bounds.left;
+    const h = bounds.bottom - bounds.top;
+
+    let width = Math.min(cropBox.width, w);
+    let height = width / ratio;
+
+    if (height > h) {
+      height = h;
+      width = height * ratio;
+    }
+
+    setCropBox({
+      x: bounds.left + (w - width) / 2,
+      y: bounds.top + (h - height) / 2,
+      width,
+      height,
+    });
+  };
+
   useKeyboardShortcuts({
     onUndo: selectedImage ? undo : undefined,
     onRedo: selectedImage ? redo : undefined,
@@ -444,8 +473,17 @@ export default function DashboardPage() {
 
     const w = bounds.right - bounds.left;
     const h = bounds.bottom - bounds.top;
-    const boxW = Math.min(240, w);
-    const boxH = Math.min(240, h);
+    let boxW = Math.min(240, w);
+    let boxH = Math.min(240, h);
+
+    if (cropRatio) {
+      boxH = boxW / cropRatio;
+
+      if (boxH > h) {
+        boxH = Math.min(240, h);
+        boxW = boxH * cropRatio;
+      }
+    }
 
     return {
       x: bounds.left + (w - boxW) / 2,
@@ -493,6 +531,18 @@ export default function DashboardPage() {
     window.addEventListener("pointerup", stopCropDrag);
   };
 
+  const applyAspectRatio = (width, height, ratio) => {
+    if (!ratio) return { width, height };
+
+    const byWidth = { width, height: width / ratio };
+    const byHeight = { width: height * ratio, height };
+
+    return Math.abs(byWidth.height - height) <
+      Math.abs(byHeight.width - width)
+      ? byWidth
+      : byHeight;
+  };
+
   const onCropMove = (e) => {
     const drag = cropDragRef.current;
     if (!drag) return;
@@ -514,14 +564,11 @@ export default function DashboardPage() {
     }
 
     if (drag.type === "se") {
-      next.width = Math.min(
-        bounds.right - next.x,
-        Math.max(40, drag.initial.width + dx),
-      );
-      next.height = Math.min(
-        bounds.bottom - next.y,
-        Math.max(40, drag.initial.height + dy),
-      );
+      let width = Math.max(40, drag.initial.width + dx);
+      let height = Math.max(40, drag.initial.height + dy);
+      const sized = applyAspectRatio(width, height, cropRatio);
+      next.width = Math.min(sized.width, bounds.right - next.x);
+      next.height = Math.min(sized.height, bounds.bottom - next.y);
     }
 
     if (drag.type === "sw") {
@@ -529,11 +576,11 @@ export default function DashboardPage() {
         bounds.left,
         Math.min(drag.initial.x + dx, drag.initial.x + drag.initial.width - 40),
       );
-      next.width = drag.initial.width - (next.x - drag.initial.x);
-      next.height = Math.min(
-        bounds.bottom - next.y,
-        Math.max(40, drag.initial.height + dy),
-      );
+      let width = drag.initial.width - (next.x - drag.initial.x);
+      let height = Math.max(40, drag.initial.height + dy);
+      const sized = applyAspectRatio(width, height, cropRatio);
+      next.width = sized.width;
+      next.height = Math.min(sized.height, bounds.bottom - next.y);
     }
 
     if (drag.type === "ne") {
@@ -544,11 +591,11 @@ export default function DashboardPage() {
           drag.initial.y + drag.initial.height - 40,
         ),
       );
-      next.height = drag.initial.height - (next.y - drag.initial.y);
-      next.width = Math.min(
-        bounds.right - next.x,
-        Math.max(40, drag.initial.width + dx),
-      );
+      let height = drag.initial.height - (next.y - drag.initial.y);
+      let width = Math.max(40, drag.initial.width + dx);
+      const sized = applyAspectRatio(width, height, cropRatio);
+      next.width = Math.min(sized.width, bounds.right - next.x);
+      next.height = sized.height;
     }
 
     if (drag.type === "nw") {
@@ -563,8 +610,11 @@ export default function DashboardPage() {
           drag.initial.y + drag.initial.height - 40,
         ),
       );
-      next.width = drag.initial.width - (next.x - drag.initial.x);
-      next.height = drag.initial.height - (next.y - drag.initial.y);
+      let width = drag.initial.width - (next.x - drag.initial.x);
+      let height = drag.initial.height - (next.y - drag.initial.y);
+      const sized = applyAspectRatio(width, height, cropRatio);
+      next.width = sized.width;
+      next.height = sized.height;
     }
 
     if (bounds) {
@@ -698,7 +748,9 @@ export default function DashboardPage() {
                     : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
                 }`}
               >
-                {cropMode ? "Exit Crop" : "Crop"}
+                {cropMode
+                  ? `Exit Crop${cropRatio ? ` (${activeRatioLabel})` : ""}`
+                  : "Crop"}
               </button>
 
               <button
@@ -710,21 +762,28 @@ export default function DashboardPage() {
               </button>
 
               {cropMode && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const crop = getCropInImagePixels();
-                    if (crop) {
-                      setOperations((prev) => [
-                        { type: "crop", ...crop },
-                        ...prev.filter((op) => op.type !== "crop"),
-                      ]);
-                    }
-                  }}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
-                >
-                  Add Crop
-                </button>
+                <div className="flex flex-col gap-3 w-full">
+                  <AspectRatioSelector
+                    value={cropRatio}
+                    onChange={handleRatioChange}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const crop = getCropInImagePixels();
+                      if (crop) {
+                        setOperations((prev) => [
+                          { type: "crop", ...crop },
+                          ...prev.filter((op) => op.type !== "crop"),
+                        ]);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white w-fit"
+                  >
+                    Add Crop
+                  </button>
+                </div>
               )}
             </div>
 
