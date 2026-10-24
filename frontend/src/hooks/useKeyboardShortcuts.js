@@ -33,6 +33,12 @@ export default function useKeyboardShortcuts(callbacks) {
         callbacksRef.current.onEscape?.();
       } else if (!mod && key === "r") {
         callbacksRef.current.onRotate?.();
+      } else if (!mod && (key === "+" || key === "=")) {
+        e.preventDefault();
+        callbacksRef.current.onZoomIn?.();
+      } else if (!mod && key === "-") {
+        e.preventDefault();
+        callbacksRef.current.onZoomOut?.();
       }
     };
 

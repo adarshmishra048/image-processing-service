@@ -4,6 +4,7 @@ import api from "../api/client";
 import UploadDropzone from "../components/UploadDropzone";
 import PreviewSkeleton from "../components/PreviewSkeleton";
 import AspectRatioSelector, { RATIOS } from "../components/AspectRatioSelector";
+import CropZoomControls from "../components/CropZoomControls";
 import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
 
 const API_BASE = "https://image-processing-service-8wui.onrender.com";
@@ -52,6 +53,10 @@ export default function DashboardPage() {
     width: 240,
     height: 240,
   });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropPan, setCropPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef(null);
 
   const pushHistory = (next, ops) => {
     const current = history[historyIndex];
@@ -176,9 +181,15 @@ export default function DashboardPage() {
     const nh = img.naturalHeight;
     if (!nw || !nh) return null;
 
-    const scale = Math.min(containerRect.width / nw, containerRect.height / nh);
-    const contentLeft = (containerRect.width - nw * scale) / 2;
-    const contentTop = (containerRect.height - nh * scale) / 2;
+    const baseScale = Math.min(
+      containerRect.width / nw,
+      containerRect.height / nh,
+    );
+    const scale = baseScale * cropZoom;
+    const contentW = nw * scale;
+    const contentH = nh * scale;
+    const contentLeft = (containerRect.width - contentW) / 2 + cropPan.x;
+    const contentTop = (containerRect.height - contentH) / 2 + cropPan.y;
 
     let x = (cropBox.x - contentLeft) / scale;
     let y = (cropBox.y - contentTop) / scale;
@@ -365,6 +376,8 @@ export default function DashboardPage() {
     setTransform({ ...defaultTransform });
     setCropMode(false);
     setCropBox({ x: 80, y: 60, width: 240, height: 240 });
+    setCropZoom(1);
+    setCropPan({ x: 0, y: 0 });
   };
 
   const applyRotate = (angle) => {
@@ -418,6 +431,12 @@ export default function DashboardPage() {
     onRotate: selectedImage
       ? () => applyRotate(((transform.rotate || 0) + 90) % 360)
       : undefined,
+    onZoomIn: cropMode
+      ? () => setCropZoom((z) => Math.min(5, z + 0.1))
+      : undefined,
+    onZoomOut: cropMode
+      ? () => setCropZoom((z) => Math.max(1, z - 0.1))
+      : undefined,
   });
 
   const updateSlider = (clientX) => {
@@ -455,15 +474,46 @@ export default function DashboardPage() {
     const nh = img.naturalHeight;
     if (!nw || !nh) return null;
 
-    const scale = Math.min(containerRect.width / nw, containerRect.height / nh);
+    const baseScale = Math.min(
+      containerRect.width / nw,
+      containerRect.height / nh,
+    );
+    const scale = baseScale * cropZoom;
     const contentW = nw * scale;
     const contentH = nh * scale;
 
     return {
-      left: (containerRect.width - contentW) / 2,
-      top: (containerRect.height - contentH) / 2,
-      right: (containerRect.width + contentW) / 2,
-      bottom: (containerRect.height + contentH) / 2,
+      left: Math.max(0, (containerRect.width - contentW) / 2 + cropPan.x),
+      top: Math.max(0, (containerRect.height - contentH) / 2 + cropPan.y),
+      right: Math.min(
+        containerRect.width,
+        (containerRect.width + contentW) / 2 + cropPan.x,
+      ),
+      bottom: Math.min(
+        containerRect.height,
+        (containerRect.height + contentH) / 2 + cropPan.y,
+      ),
+    };
+  };
+
+  const applyPanClamp = (pan) => {
+    const container = cropContainerRef.current;
+    const img = originalImageRef.current;
+    if (!container || !img) return pan;
+
+    const rect = container.getBoundingClientRect();
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return pan;
+
+    const baseScale = Math.min(rect.width / nw, rect.height / nh);
+    const scale = baseScale * cropZoom;
+    const maxX = Math.max(0, (nw * scale - rect.width) / 2);
+    const maxY = Math.max(0, (nh * scale - rect.height) / 2);
+
+    return {
+      x: Math.min(maxX, Math.max(-maxX, pan.x)),
+      y: Math.min(maxY, Math.max(-maxY, pan.y)),
     };
   };
 
@@ -531,16 +581,17 @@ export default function DashboardPage() {
     window.addEventListener("pointerup", stopCropDrag);
   };
 
-  const applyAspectRatio = (width, height, ratio) => {
-    if (!ratio) return { width, height };
+  const fitToRatio = (width, height, ratio, maxW, maxH) => {
+    const w = Math.max(40, Math.min(width, maxW));
+    const h = Math.max(40, Math.min(height, maxH));
 
-    const byWidth = { width, height: width / ratio };
-    const byHeight = { width: height * ratio, height };
+    if (!ratio) return { width: w, height: h };
+    if (w / ratio <= maxH) return { width: w, height: w / ratio };
 
-    return Math.abs(byWidth.height - height) <
-      Math.abs(byHeight.width - width)
-      ? byWidth
-      : byHeight;
+    const byH = { width: Math.min(w, maxH * ratio), height: maxH };
+    if (byH.width > maxW) return { width: maxW, height: maxH };
+
+    return byH;
   };
 
   const onCropMove = (e) => {
@@ -564,11 +615,17 @@ export default function DashboardPage() {
     }
 
     if (drag.type === "se") {
-      let width = Math.max(40, drag.initial.width + dx);
-      let height = Math.max(40, drag.initial.height + dy);
-      const sized = applyAspectRatio(width, height, cropRatio);
-      next.width = Math.min(sized.width, bounds.right - next.x);
-      next.height = Math.min(sized.height, bounds.bottom - next.y);
+      const maxW = bounds.right - next.x;
+      const maxH = bounds.bottom - next.y;
+      const sized = fitToRatio(
+        drag.initial.width + dx,
+        drag.initial.height + dy,
+        cropRatio,
+        maxW,
+        maxH,
+      );
+      next.width = sized.width;
+      next.height = sized.height;
     }
 
     if (drag.type === "sw") {
@@ -576,11 +633,17 @@ export default function DashboardPage() {
         bounds.left,
         Math.min(drag.initial.x + dx, drag.initial.x + drag.initial.width - 40),
       );
-      let width = drag.initial.width - (next.x - drag.initial.x);
-      let height = Math.max(40, drag.initial.height + dy);
-      const sized = applyAspectRatio(width, height, cropRatio);
+      const maxW = bounds.right - next.x;
+      const maxH = bounds.bottom - next.y;
+      const sized = fitToRatio(
+        drag.initial.width - (next.x - drag.initial.x),
+        drag.initial.height + dy,
+        cropRatio,
+        maxW,
+        maxH,
+      );
       next.width = sized.width;
-      next.height = Math.min(sized.height, bounds.bottom - next.y);
+      next.height = sized.height;
     }
 
     if (drag.type === "ne") {
@@ -591,10 +654,16 @@ export default function DashboardPage() {
           drag.initial.y + drag.initial.height - 40,
         ),
       );
-      let height = drag.initial.height - (next.y - drag.initial.y);
-      let width = Math.max(40, drag.initial.width + dx);
-      const sized = applyAspectRatio(width, height, cropRatio);
-      next.width = Math.min(sized.width, bounds.right - next.x);
+      const maxW = bounds.right - next.x;
+      const maxH = bounds.bottom - next.y;
+      const sized = fitToRatio(
+        drag.initial.width + dx,
+        drag.initial.height - (next.y - drag.initial.y),
+        cropRatio,
+        maxW,
+        maxH,
+      );
+      next.width = sized.width;
       next.height = sized.height;
     }
 
@@ -610,9 +679,15 @@ export default function DashboardPage() {
           drag.initial.y + drag.initial.height - 40,
         ),
       );
-      let width = drag.initial.width - (next.x - drag.initial.x);
-      let height = drag.initial.height - (next.y - drag.initial.y);
-      const sized = applyAspectRatio(width, height, cropRatio);
+      const maxW = bounds.right - next.x;
+      const maxH = bounds.bottom - next.y;
+      const sized = fitToRatio(
+        drag.initial.width - (next.x - drag.initial.x),
+        drag.initial.height - (next.y - drag.initial.y),
+        cropRatio,
+        maxW,
+        maxH,
+      );
       next.width = sized.width;
       next.height = sized.height;
     }
@@ -633,6 +708,64 @@ export default function DashboardPage() {
     window.removeEventListener("pointerup", stopCropDrag);
   };
 
+  // ---- Crop zoom / pan ----
+  const startPan = (e) => {
+    if (!cropMode || cropZoom <= 1) return;
+    setIsPanning(true);
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: cropPan.x,
+      panY: cropPan.y,
+    };
+  };
+
+  const movePan = (e) => {
+    const start = panStartRef.current;
+    if (!start) return;
+    setCropPan(
+      applyPanClamp({
+        x: start.panX + (e.clientX - start.x),
+        y: start.panY + (e.clientY - start.y),
+      }),
+    );
+  };
+
+  const endPan = () => {
+    panStartRef.current = null;
+    setIsPanning(false);
+  };
+
+  useEffect(() => {
+    window.addEventListener("pointermove", movePan);
+    window.addEventListener("pointerup", endPan);
+
+    return () => {
+      window.removeEventListener("pointermove", movePan);
+      window.removeEventListener("pointerup", endPan);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = cropContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      setCropZoom((z) =>
+        Math.max(1, Math.min(5, z + (e.deltaY > 0 ? -0.1 : 0.1))),
+      );
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [cropMode]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCropPan((prev) => applyPanClamp(prev));
+  }, [cropZoom]);
+
   useEffect(() => {
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
@@ -644,8 +777,11 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (!cropMode) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (cropMode) setCropBox(getInitialCropBox());
+    setCropBox(getInitialCropBox());
+    setCropZoom(1);
+    setCropPan({ x: 0, y: 0 });
   }, [cropMode]);
 
   useEffect(() => {
@@ -768,6 +904,17 @@ export default function DashboardPage() {
                     onChange={handleRatioChange}
                   />
 
+                  <CropZoomControls
+                    zoom={cropZoom}
+                    onZoomChange={setCropZoom}
+                    onZoomIn={() => setCropZoom((z) => Math.min(5, z + 0.1))}
+                    onZoomOut={() => setCropZoom((z) => Math.max(1, z - 0.1))}
+                    onReset={() => {
+                      setCropZoom(1);
+                      setCropPan({ x: 0, y: 0 });
+                    }}
+                  />
+
                   <button
                     type="button"
                     onClick={() => {
@@ -854,7 +1001,7 @@ export default function DashboardPage() {
 
               <div
                 ref={sliderRef}
-                onPointerDown={handlePointerDown}
+                onPointerDown={cropMode ? undefined : handlePointerDown}
                 className="relative w-full min-h-72 md:min-h-112 aspect-video rounded-3xl overflow-hidden border border-slate-700 bg-slate-900 select-none touch-none shadow-2xl"
               >
                 {previewLoading && <PreviewSkeleton />}
@@ -865,12 +1012,29 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div ref={cropContainerRef} className="absolute inset-0">
+                <div
+                  ref={cropContainerRef}
+                  onPointerDown={startPan}
+                  onDoubleClick={() => {
+                    setCropZoom(1);
+                    setCropPan({ x: 0, y: 0 });
+                  }}
+                  className={`absolute inset-0 ${
+                    cropZoom > 1
+                      ? isPanning
+                        ? "cursor-grabbing"
+                        : "cursor-grab"
+                      : ""
+                  }`}
+                >
                   <img
                     ref={originalImageRef}
                     src={cropSource}
                     alt="Original"
-                    className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
+                    className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none transition-transform duration-75"
+                    style={{
+                      transform: `translate(${cropPan.x}px, ${cropPan.y}px) scale(${cropZoom})`,
+                    }}
                     draggable={false}
                   />
 
@@ -893,28 +1057,40 @@ export default function DashboardPage() {
 
                   {cropMode && (
                     <>
-                      <img
-                        src={cropMode ? cropSource : previewUrl || cropSource}
-                        alt=""
-                        draggable={false}
-                        className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
-                        style={{
-                          clipPath: makeHolePolygon(cropBox),
-                          filter: "blur(8px) brightness(0.6)",
-                        }}
-                      />
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ clipPath: makeHolePolygon(cropBox) }}
+                      >
+                        <img
+                          src={cropMode ? cropSource : previewUrl || cropSource}
+                          alt=""
+                          draggable={false}
+                          className="absolute inset-0 w-full h-full object-contain bg-slate-900 transition-transform duration-75"
+                          style={{
+                            transform: `translate(${cropPan.x}px, ${cropPan.y}px) scale(${cropZoom})`,
+                            filter: "blur(8px) brightness(0.6)",
+                          }}
+                        />
+                      </div>
 
                       <div className="absolute inset-0 bg-black/45" />
 
-                      <img
-                        src={cropSource}
-                        alt="Focused preview"
-                        draggable={false}
-                        className="absolute inset-0 w-full h-full object-contain bg-slate-900 pointer-events-none"
+                      <div
+                        className="absolute inset-0 pointer-events-none"
                         style={{
                           clipPath: `polygon(${Math.max(0, cropBox.x)}px ${Math.max(0, cropBox.y)}px, ${Math.max(0, cropBox.x + cropBox.width)}px ${Math.max(0, cropBox.y)}px, ${Math.max(0, cropBox.x + cropBox.width)}px ${Math.max(0, cropBox.y + cropBox.height)}px, ${Math.max(0, cropBox.x)}px ${Math.max(0, cropBox.y + cropBox.height)}px)`,
                         }}
-                      />
+                      >
+                        <img
+                          src={cropSource}
+                          alt="Focused preview"
+                          draggable={false}
+                          className="absolute inset-0 w-full h-full object-contain bg-slate-900 transition-transform duration-75"
+                          style={{
+                            transform: `translate(${cropPan.x}px, ${cropPan.y}px) scale(${cropZoom})`,
+                          }}
+                        />
+                      </div>
 
                       <div
                         className="absolute border-2 border-indigo-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] rounded-md cursor-move"
@@ -965,25 +1141,31 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)] pointer-events-none"
-                  style={{ left: `${sliderPosition}%` }}
-                />
+                {!cropMode && (
+                  <>
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)] pointer-events-none"
+                      style={{ left: `${sliderPosition}%` }}
+                    />
 
-                <div
-                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ left: `${sliderPosition}%` }}
-                >
-                  <div className="w-12 h-12 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-2xl border border-white/80 ring-4 ring-white/10">
-                    ↔
-                  </div>
+                    <div
+                      className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                      style={{ left: `${sliderPosition}%` }}
+                    >
+                      <div className="w-12 h-12 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-2xl border border-white/80 ring-4 ring-white/10">
+                        ↔
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!cropMode && (
+                <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                  <span>Drag to compare</span>
+                  <span>{Math.round(sliderPosition)}% revealed</span>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                <span>Drag to compare</span>
-                <span>{Math.round(sliderPosition)}% revealed</span>
-              </div>
+              )}
             </div>
             {/* Controls */}
             <div className="grid md:grid-cols-2 gap-4">
